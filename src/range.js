@@ -1,16 +1,69 @@
+/** Default comparator.
+* @param a first parameter
+* @param b second parameter
+* @return a < b
+*/
 function DEFAULT_ORDER (a,b) { return a < b };
 
+/** Range is an abstract class representing a range of values.
+*
+* Objects extending range should implement 'contains' and 'intersect' operations.
+*
+* Not all ranges are necessarily continuous (like dates/times) or numeric. A Range may also represent
+* a node in a directed graph - in which case 'contains' may mean 'is a parent of' and 'intersect' may 
+* mean 'common subtree'.
+*
+* Range also provides a number of static functions that construct new instances of Range (or 
+* usually of some subclass of range).
+*
+*/
 class Range {
-	static equals(value) 				{ return new Equals(value); }
-	static lessThan(value, order) 		{ return new LessThan(value, order); }
-	static greaterThan(value, order) 	{ return new GreaterThan(value, order); }
-	static isRange(range)				{ return range.operator !== undefined; }
+	/** Create a range containing a single value */
+	static equals(value) 				
+	{ return new Equals(value); }
 
+	/** Create a range containing values less than a given value 
+	* @param value range boundary
+	* @param {Function} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	*/
+	static lessThan(value, order=DEFAULT_ORDER) 		
+	{ return new LessThan(value, order); }
+
+	/** Create a range containing values greater than a given value 
+	* @param value range boundary
+	* @param {Function} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	*/		
+	static greaterThan(value, order=DEFAULT_ORDER) 	
+	{ return new GreaterThan(value, order); }
+
+
+	/** Create a range containing values between the given values
+	* @param lower - lower range boundary
+	* @param upper - upper range boundary
+	* @param {Function} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	*/
 	static between(lower, upper, order = DEFAULT_ORDER)	{ 
 		if (!order(lower,upper)) return undefined;
 		return new Between(Range.greaterThan(lower, order), Range.lessThan(upper, order));
 	}
 
+	/** Check to see if an object is a Range 
+	*
+	* @param obj - object to check.
+	* @return true if obj has operator, contains, and intersect properties.
+	*/
+	static isRange(obj)				{ return obj.operator && obj.contains && obj.intersect; }
+
+	/** Create a range.
+	* 
+	* if upper is not specified, return Range.equals(lower) or simply lower if lower is already a Range object.
+	* if upper is spefied, create a 'between' range from lower to upper. If values are inompatible, return undefined.
+	*
+	* @param {Range|Object} lower - first bounding value for range
+	* @param {Range|Object} [upper] - upper bounding value for range
+	* @param {Function} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns a range, or undefined if paramters are not compatible.
+	*/
 	static from(lower, upper, order = DEFAULT_ORDER) 	{ 
 
 		if (upper === undefined) 
