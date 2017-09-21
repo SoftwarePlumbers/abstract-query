@@ -58,7 +58,7 @@ describe('Query', () => {
     	let expression = query.toExpression( 
     			(...ands) => '(' + ands.join(') and (') + ')', 
     			(...ors) => ors.join(' or '),
-    			([dimension, range]) => dimension + range.operator + range.value
+    			(dimension, operator, value) => dimension + operator + value
     		);
 
     	console.log(expression);

@@ -60,19 +60,19 @@ class Query {
 		return constraints[0];
 	}
 
-	toExpression(andExpr, orExpr, rangeExpr) {
+	toExpression(andExpr, orExpr, operExpr) {
 		if (this.cubes.length === 1) {
-			return andExpr(...Stream.fromProperties(this.cubes[0]).map(rangeExpr).toArray());
+			return andExpr(...Stream.fromProperties(this.cubes[0]).map(([dimension,range])=>range.toExpression(name, andExpr, operExpr)).toArray());
 		}
 		if (this.cubes.length > 1) {
 			let { dimension, range, count } = this.findFactor();
 
 			if (count > 1) {
 				let { factored, remainder } = this.factor(dimension, range);
-				if (factored && remainder) return orExpr(andExpr(rangeExpr(range), toExpression(factored)),toExpression(remainder));
-				if (factored) return andExpr(rangeExpr(range), toExpression(factored));
+				if (factored && remainder) return orExpr(andExpr(range.toExpression(dimension, andExpr, operExpr), toExpression(factored)),toExpression(remainder));
+				if (factored) return andExpr(range.toExpression(dimension, andExpr, operExpr), toExpression(factored));
 			} else {
-				return orExpr(...this.cubes.map(cube => andExpr(...Stream.fromProperties(cube).map(rangeExpr).toArray())));
+				return orExpr(...this.cubes.map(cube => andExpr(...Stream.fromProperties(cube).map(([dimension,range])=>range.toExpression(dimension, andExpr, operExpr)).toArray())));
 			}
 
 		}
