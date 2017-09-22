@@ -2,6 +2,8 @@ const Stream = require('iterator-plumbing');
 const Range = require('./range');
 
 /** A cube maps each dimension in an abstract space to a range.
+ *
+ * @private
  */
 class Cube {
 

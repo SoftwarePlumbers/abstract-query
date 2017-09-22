@@ -36,6 +36,20 @@ class Query {
 		this.cubes = cubes;
 	}
 
+	/** Types on which comparison operators are valid.
+	* @typedef {number|string|Date} Comparable
+	*/
+
+	/** A set of constraints.
+	*
+	* An object with properties names that represent field names on which a constraint is applied, and
+	* property values represent a constraint. The constraint may be a simple comparable value, a Range
+	* object, or an array with a maximum of two elements representing the lower and upper bounds of a
+	* constraint.
+	*
+	* @typedef {Object<string,Range|Comparable[]|Comparable>} Query~ConstraintObject 
+	*/
+
 	/** Create a query from an constraint object 
 	*
 	* The constraint object can have any number of properties. In the following example, the resulting
@@ -43,7 +57,7 @@ class Query {
 	* @example
 1	* Query.fromConstraint({ w: [3,], x : 3, y : [3,7], z: [,7]})
 	*
-	* @param {Object} obj - A constraint object.
+	* @param {Query~ConstraintObject} obj - A constraint object.
 	* @returns a Query
 	*/
 	static fromConstraint(obj) {
@@ -60,7 +74,7 @@ class Query {
 	}
 
 	/**
- 	* @typedef {Object} FactorResult
+ 	* @typedef {Object} Query~FactorResult
  	* @property {Query} factored - the part of the query from which a factor has been removed
  	* @property {Query} remainder - the part of the query from which a factor could not be removed
  	*/
@@ -79,8 +93,8 @@ class Query {
 	* factored should equal `Query.fromConstraint({y : [3,4], z : 8}).or({y: [,4], z: 7})` and
 	* remainder should equal `Query.fromConstraint({x:3, y: [3,], z: 7})`
 	*
-	* @param {Object} constraint - object to factor out of query
-	* @return {FactorResult} 
+	* @param {ConstraintObject} constraint - object to factor out of query
+	* @return {Query~FactorResult} 
 	*/
 	factor(common) {
 		let result = [];
@@ -179,7 +193,12 @@ class Query {
 		}
 	}
 
-	orCube(other_cube) {
+	/** Create a new query that will return results in this query or some cube.
+	* @private 
+	* @param {Cube} other_cube - cube of additional results
+	* @returns {Query} a new compound query.
+	*/
+	_orCube(other_cube) {
 		let result = [];
 		let match = false;
 		for (let cube of this.cubes) {
@@ -198,10 +217,20 @@ class Query {
 		return new Query(result);
 	}
 
+	/** Create a new query that will return the union of results in this query with some other constraint.
+	*
+	* @param {Query~ConstraintObject} other_constraint
+	* @returns {Query} a new compound query.
+	*/
 	orConstraint(other_constraint) {
-		return this.orCube(new Cube(other_constraint));
+		return this._orCube(new Cube(other_constraint));
 	}
 
+	/** Create a new query that will return the union of results in this query and with some other query.
+	*
+	* @param {Query} other_query - the other query
+	* @returns {Query} a new compound query that is the union of result sets from both queries
+	*/
 	orQuery(other_query) {
 		let result = this;
 		for (cube of other_query.cubes) {
@@ -209,13 +238,23 @@ class Query {
 		}
 	}
 
+	/** Create a new query that will return the union of results in this query and with some other query or constraint.
+	*
+	* @param {Query|Query~ConstraintObject} obj - the other query or constraint
+	* @returns {Query} a new compound query that is the union of result sets
+	*/
 	or(obj) {
 		if (obj instanceof Query) return this.orQuery(obj);
-		if (obj instanceof Cube) return this.orCube(obj);
+		if (obj instanceof Cube) return this._orCube(obj);
 		return this.orConstraint(obj);
 	}
 
-	andCube(other_cube) {
+	/** Create a new query that will return results that are in this query and in some cube.
+	* @private 
+	* @param {Cube} other_cube - cube of additional results
+	* @returns {Query} a new compound query.
+	*/
+	_andCube(other_cube) {
 		let result = [];
 		for (let cube of this.cubes) {
 			let intersection = cube.intersect(other_cube);
@@ -224,21 +263,37 @@ class Query {
 		return new Query(result);
 	}
 
+	/** Create a new query that will return results in this query that also comply with some other constraint.
+	*
+	* @param {Query~ConstraintObject} other_constraint
+	* @returns {Query} a new compound query.
+	*/
 	andConstraint(constraint) {
-		return this.andCube(new Cube(constraint));
+		return this._andCube(new Cube(constraint));
 	}
 
+
+	/** Create a new query that will return the intersection of results in this query and some other query.
+	*
+	* @param {Query} other_query - the other query
+	* @returns {Query} a new compound query that is the intersection of result sets from both queries
+	*/
 	andQuery(other_query) {
 		let result = other_query;
 		for (cube of this.cubes) {
-			let result = result.andCube(cube);
+			let result = result._andCube(cube);
 		}
 		return result;
 	}
 
+	/** Create a new query that will return the union of results in this query and with some other query or constraint.
+	*
+	* @param {Query|Query~ConstraintObject} obj - the other query or constraint
+	* @returns {Query} a new compound query that is the union of result sets
+	*/
 	and(obj) {
 		if (obj instanceof Query) return this.andQuery(obj);
-		if (obj instanceof Cube) return this.andCube(obj);
+		if (obj instanceof Cube) return this._andCube(obj);
 		return this.andConstraint(obj);
 	}
 }
