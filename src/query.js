@@ -106,6 +106,10 @@ class Query {
 		}
 	}
 
+	/** Find the factor that is common to the largest number of sub-expressions in canonical form.
+	*
+	* @returns {Object} A constraint object containing the common factor, or undefined.
+	*/
 	findFactor() {
 		let constraints = [];
 		for (let cube of this.cubes) {
@@ -120,9 +124,13 @@ class Query {
 				if (!match) constraints.push({ dimension, count: 1, range: cube[dimension] });
 			}
 		}
-		constraints.sort((a,b) => (a.count > b.count) ? -1 : ((b.count > a.count) ? 1 : 0))
-		
-		return constraints[0];
+
+		let bucket = constraints
+			.filter(a=>a.count > 1)
+			.sort((a,b) => (a.count > b.count) ? -1 : ((b.count > a.count) ? 1 : 0))
+			.shift();
+
+		return bucket === undefined ? undefined : { [bucket.dimension] : bucket.range };
 	}
 
 	toExpression(andExpr, orExpr, operExpr) {
@@ -130,10 +138,11 @@ class Query {
 			return andExpr(...Stream.fromProperties(this.cubes[0]).map(([dimension,range])=>range.toExpression(name, andExpr, operExpr)).toArray());
 		}
 		if (this.cubes.length > 1) {
-			let { dimension, range, count } = this.findFactor();
-
-			if (count > 1) {
-				let { factored, remainder } = this.factor({ [dimension]: range });
+			let factor = this.findFactor();
+			if (factor) {
+				let dimension = Object.keys(factor).shift();
+				let range = factor[dimension];
+				let { factored, remainder } = this.factor(factor);
 				if (factored && remainder) return orExpr(andExpr(range.toExpression(dimension, andExpr, operExpr), toExpression(factored)),toExpression(remainder));
 				if (factored) return andExpr(range.toExpression(dimension, andExpr, operExpr), toExpression(factored));
 			} else {
