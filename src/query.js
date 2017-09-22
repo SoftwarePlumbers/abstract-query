@@ -30,7 +30,7 @@ class Query {
 	*
 	* Should be considered a private constructor - use fromConstraint instead to create a query.
 	*
-	* @param {Cube[]} An array of cubes.
+	* @param {Cube[]} cubes - An array of cubes.
 	*/
 	constructor(cubes = []) {
 		this.cubes = cubes;
@@ -43,7 +43,7 @@ class Query {
 	* @example
 1	* Query.fromConstraint({ w: [3,], x : 3, y : [3,7], z: [,7]})
 	*
-	* @param {Object} A constraint object.
+	* @param {Object} obj - A constraint object.
 	* @returns a Query
 	*/
 	static fromConstraint(obj) {
@@ -61,8 +61,8 @@ class Query {
 
 	/**
  	* @typedef {Object} FactorResult
- 	* @property {Query} factored the part of the query from which a factor has been removed
- 	* @property {Query} remainder the part of the query from which a factor could not be removed
+ 	* @property {Query} factored - the part of the query from which a factor has been removed
+ 	* @property {Query} remainder - the part of the query from which a factor could not be removed
  	*/
 
 	/** Attempt to simplify a query by removing a common factor from the canonical form.
@@ -133,6 +133,33 @@ class Query {
 		return bucket === undefined ? undefined : { [bucket.dimension] : bucket.range };
 	}
 
+	/**
+	* The result of toExpression - can be any type, but the provided callbacks should all return the same type. Often a String.
+ 	* @typedef {Object} Expression
+ 	*/
+
+	/**
+ 	* Callback to build an compound expression from several sub-expressions.
+ 	* @callback Query~compoundExprBuilder
+ 	* @param {...Expression} subexpressions - subexpressions from which compound expression is built
+ 	* @returns {Expression} a compound expression.
+ 	*/
+
+	/**
+ 	* Callback to build an atomic expression from a property name, an operator, and a value
+ 	* @callback atomicExprBuilder
+ 	* @param {string} name - Name of field on which constraint operates
+ 	* @param {string} operator - operator (will be one of =,<,>,>=,<=)
+ 	* @param {Object} value - value for constraint
+ 	* @returns {Expression} an expression representing the atomic constraint.
+ 	*/
+
+	/** Convert a query to a an expression.
+	*
+	* @param {Query~compoundExprBuilder} andExpr - Generate an 'and' expression from several subexpressions
+	* @param {Query~compoundExprBuilder} orExpr - Generate an 'or' expression from several subexpressions
+	* @param {atomicExprBuilder} operExpr - Generate a constraint expression from the name of the property, the operator type, and a value
+	*/
 	toExpression(andExpr, orExpr, operExpr) {
 		if (this.cubes.length === 1) {
 			return andExpr(...Stream.fromProperties(this.cubes[0]).map(([dimension,range])=>range.toExpression(name, andExpr, operExpr)).toArray());
