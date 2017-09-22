@@ -56,23 +56,40 @@ class Range {
 
 	/** Create a range.
 	* 
-	* if upper is not specified, return Range.equals(lower) or simply lower if lower is already a Range object.
-	* if upper is spefied, create a 'between' range from lower to upper. If values are inompatible, return undefined.
+	* Specified bounds may be an array, an object, or a range
 	*
-	* @param {Range|Object} lower - first bounding value for range
-	* @param {Range|Object} [upper] - upper bounding value for range
+	* @param {Range|Object|Array} bounds bounding values for range
 	* @param {Function} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns a range, or undefined if paramters are not compatible.
 	*/
-	static from(lower, upper, order = DEFAULT_ORDER) 	{ 
+	static from(bounds, order = DEFAULT_ORDER) 	{ 
 
-		if (upper === undefined) 
-			return Range.isRange(lower) ? lower : Range.equals(lower);
+		if (Array.isArray(bounds)) {
+			if (bounds.length > 0) {
+				let lower = bounds[0];
+				if (lower !== undefined && !Range.isRange(lower)) lower = Range.greaterThan(lower); 
+				if (bounds.length > 1) {					
+					let upper = bounds[1];
+					if (upper !== undefined && !Range.isRange(upper)) upper = Range.lessThan(upper); 
+					if (bounds.length > 2) {
+						throw new RangeError('Range.from allows maximum of two bounds');
+					} else {
+						if (lower) {
+							if (order(lower.value, upper.value)) {
+								return new Between(lower, upper);
+							}
+						} else {
+							return upper;
+						}
+					}
+				} else {
+					return lower;
+				}
+			}
 
-		lower = Range.isRange(lower) ? lower : Range.greaterThan(lower, order);
-		upper = Range.isRange(upper) ? upper : Range.lessThan(upper, order);
-
-		if (order(lower.value, upper.value)) return new Between(lower, upper);
+		} else {
+			return Range.isRange(bounds) ? bounds : Range.equals(bounds);
+		}
 
 		return undefined;
 	}
@@ -92,6 +109,7 @@ class OpenRange extends Range {
 	greaterThan(other) 					{ return this.order(other.value, this.value); }
 	toExpression(dimension, and, operator)	{ return operator(dimension, this.operator, this.value); }
 	equals(range)						{ return this.operator === range.operator && this.value === range.value; }
+	toString()							{ return `${this.operator} ${this.value}`; }
 }
 
 
@@ -117,8 +135,8 @@ class Between extends Range {
 
 	toExpression(dimension, and, operator)	{ 
 		return and(
-				this.lower_bound.toExpr(dimension, and, operator),
-				this.upper_bound.toExpr(dimension, and, operator)
+				this.lower_bound.toExpression(dimension, and, operator),
+				this.upper_bound.toExpression(dimension, and, operator)
 			)
 	}
 
@@ -129,6 +147,8 @@ class Between extends Range {
 			&& this.lower_bound.equals(range.lower_bound) 
 			&& this.upper_bound.equals(range.upper_bound); 
 		}
+
+	toString()							{ return `between(${this.lower_bound}, ${this.upper_bound})`; }
 }
 
 class Equals extends Range {
@@ -156,6 +176,8 @@ class Equals extends Range {
 	toExpression(dimension, and, operator)	{ return operator(dimension, this.operator, this.value); }
 
 	equals(range)						{ return this.operator === range.operator && this.value === range.value; }
+
+	toString()							{ return `=${this.value}`; }
 }
 
 class LessThan extends OpenRange {
@@ -176,8 +198,8 @@ class LessThan extends OpenRange {
 	intersect(range) {
 		if (this.contains(range)) return range;
 		if (range.contains(this)) return this;
-		if (range.operator === GreaterThan.OPERATOR) return Range.from(range, this);
-		if (range.operator === Between.OPERATOR) return Range.from(range.lower_bound, this);
+		if (range.operator === GreaterThan.OPERATOR) return Range.from([range, this], this.order);
+		if (range.operator === Between.OPERATOR) return Range.from([range.lower_bound, this], this.order);
 		return undefined;
 	}
 }
@@ -200,8 +222,8 @@ class GreaterThan extends OpenRange {
 	intersect(range) {
 		if (this.contains(range)) return range;
 		if (range.contains(this)) return this;
-		if (range.operator === LessThan.OPERATOR) return Range.from(this, range);
-		if (range.operator === Between.OPERATOR) return Range.from(this, range.upper_bound);
+		if (range.operator === LessThan.OPERATOR) return Range.from([this, range], this.order);
+		if (range.operator === Between.OPERATOR) return Range.from([this, range.upper_bound], this.order);
 		return undefined;
 	}
 }

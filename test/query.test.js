@@ -51,9 +51,9 @@ describe('Query', () => {
 
     it('creates expression', () => {
     	let query = Query
-    		.fromConstraint({x: Range.equals(2), y: Range.equals(4)})
-    		.and({ z: Range.equals(5)})
-    		.or({x:6, y:3, z:99})
+    		.fromConstraint({x: [,2], y: 4})
+    		.and({ z: 5})
+    		.or({x:[6,8], y:3, z:99})
 
     	let expression = query.toExpression( 
     			(...ands) => '(' + ands.join(') and (') + ')', 
@@ -63,6 +63,32 @@ describe('Query', () => {
 
     	console.log(expression);
     });    
+
+    it('factorizes', () => {
+    	let query = Query
+    		.fromConstraint({x: 2, y : [3,4], z : 8})
+    		.or({x:2, y: [,4], z: 7})
+    		.or({x:3, y: [3,], z: 7});
+
+    	let factored_part = Query
+    		.fromConstraint({y : [3,4], z : 8})
+    		.or({y: [,4], z: 7})
+
+    	let { factored, remainder } = query.factor({ x: 2});
+
+    	expect(remainder).to.deep.equal(Query.fromConstraint({x:3, y: [3,], z: 7}));
+    	expect(factored).to.deep.equal(factored_part);
+
+    	let expression = factored.toExpression( 
+    			(...ands) => '(' + ands.join(') and (') + ')', 
+    			(...ors) => ors.join(' or '),
+    			(dimension, operator, value) => dimension + operator + value
+    		);
+
+    	console.log(expression);
+
+
+    });
 
 
 });

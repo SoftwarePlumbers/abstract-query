@@ -1,6 +1,8 @@
 const Stream = require('iterator-plumbing');
 const Range = require('./range');
 
+/** A cube maps each dimension in an abstract space to a range.
+ */
 class Cube {
 
 	constructor(constraints = {}) {
@@ -43,11 +45,13 @@ class Cube {
 
 	removeConstraints(constraints) {
 		let result = new Cube(this);
-		for (let dimension in constraints) result.removeConstraint(dimension, constraints[dimension]);
+		for (let dimension in constraints) result.removeConstraint(dimension, Range.from(constraints[dimension]));
 		return result;
 	}
 
-
+	toString() {
+		return '{ ' + Stream.fromProperties(this).map(([k,v])=>`${k}:${v}`).join(', ') + ' }';
+	}
 }
 
 module.exports = Cube;

@@ -42,10 +42,10 @@ describe('Range', () => {
 		expect(range1.equals(range4)).to.be.false;
 		let range5 = Range.lessThan(37);
 		expect(range5.equals(range4)).to.be.true;
-		let range6 = Range.from(14,37);
-		let range7 = Range.from(14,37);
+		let range6 = Range.from([14,37]);
+		let range7 = Range.from([14,37]);
 		expect(range6.equals(range7)).to.be.true;
-		let range8 = Range.from(15,37);
+		let range8 = Range.from([15,37]);
 		expect(range6.equals(range8)).to.be.false;
     });
 
@@ -142,8 +142,8 @@ describe('Range', () => {
     	let range3 = Range.lessThan(14);
     	let range4 = Range.greaterThan(37);
 
-    	expect(range1.intersect(range2).equals(Range.from(range2,range1))).to.be.true;
-    	expect(range2.intersect(range1).equals(Range.from(range2,range1))).to.be.true;
+    	expect(range1.intersect(range2).equals(Range.from([range2,range1]))).to.be.true;
+    	expect(range2.intersect(range1).equals(Range.from([range2,range1]))).to.be.true;
     	expect(range3.intersect(range4)).to.be.undefined;
     	expect(range4.intersect(range3)).to.be.undefined;
     });
@@ -159,8 +159,8 @@ describe('Range', () => {
     	let range6 = Range.between(38,39);
 
     	expect(range1.intersect(range2)).to.deep.equal(range2);
-    	expect(range1.intersect(range3)).to.deep.equal(Range.from(14,15));
-    	expect(range1.intersect(range4)).to.deep.equal(Range.from(36,37));
+    	expect(range1.intersect(range3)).to.deep.equal(Range.from([14,15]));
+    	expect(range1.intersect(range4)).to.deep.equal(Range.from([36,37]));
     	expect(range1.intersect(range5)).to.be.undefined;
     	expect(range1.intersect(range5)).to.be.undefined;
     });
