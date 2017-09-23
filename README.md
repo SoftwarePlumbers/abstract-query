@@ -6,9 +6,9 @@ Abstract query, providing for client-side optimisation of queries.
 
 ```javascript
 let query = Query
-    .fromConstraint({x: Range.lessThan(2), y: 4})
+    .fromConstraint({x: [,2], y: 4})
     .and({ z: 5})
-    .or({x:6, y:3, z: Range.greaterThan(99)})
+    .or({x:6, y:3, z: [99,]})
 
 let expression = query.toExpression( 
     (...ands) => '(' + ands.join(') and (') + ')', 

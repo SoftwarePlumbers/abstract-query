@@ -28,8 +28,21 @@ describe('Range', () => {
     it('can create between', () => {
     	let range1 = Range.between(14, 37);
     	expect(range1.upper_bound.equals(Range.lessThan(37))).to.be.true;
-    	expect(range1.lower_bound.equals(Range.greaterThan(14))).to.be.true;
+    	expect(range1.lower_bound.equals(Range.greaterThanOrEqual(14))).to.be.true;
     	expect(range1.operator).to.equal('between');
+    });
+
+    it('can create ranges from bounds object', ()=>{
+    	let range1 = Range.fromBounds({'=':5});
+    	expect(range1).to.deep.equal(Range.equals(5));
+    	range1 = Range.fromBounds({'<':5});
+    	expect(range1).to.deep.equal(Range.lessThan(5));
+    	range1 = Range.fromBounds({'>':5});
+    	expect(range1).to.deep.equal(Range.greaterThan(5));
+    	range1 = Range.fromBounds({'<=':5});
+    	expect(range1).to.deep.equal(Range.lessThanOrEqual(5));
+    	range1 = Range.fromBounds({'>=':5});
+    	expect(range1).to.deep.equal(Range.greaterThanOrEqual(5));
     });
 
     it('can compare ranges with equals', () => {
@@ -69,6 +82,27 @@ describe('Range', () => {
     	expect(range1.contains(range3)).to.be.true;
     });
 
+    it('correct containment for lessThanOrEqual', () => {
+    	let range1 = Range.lessThanOrEqual(37);
+    	let range2 = Range.lessThanOrEqual(14);
+    	let range3 = Range.lessThanOrEqual(37);
+
+    	expect(range1.contains(range2)).to.be.true;
+    	expect(range2.contains(range1)).to.be.false;
+    	expect(range1.contains(range3)).to.be.true;
+    });
+
+    it('correct containment for lessThanOrEqual/lessThan/equals', () => {
+    	let range1 = Range.lessThanOrEqual(37);
+    	let range2 = Range.equals(37);
+    	let range3 = Range.lessThan(37);
+
+    	expect(range1.contains(range3)).to.be.true;
+    	expect(range1.contains(range2)).to.be.true;
+    	expect(range3.contains(range1)).to.be.false;
+    	expect(range3.contains(range2)).to.be.false;
+    });
+
     it('correct containment for greaterThan', () => {
     	let range1 = Range.greaterThan(37);
     	let range2 = Range.greaterThan(14);
@@ -77,6 +111,27 @@ describe('Range', () => {
     	expect(range1.contains(range2)).to.be.false;
     	expect(range2.contains(range1)).to.be.true;
     	expect(range1.contains(range3)).to.be.true;
+    });
+
+    it('correct containment for greaterThanOrEqual', () => {
+    	let range1 = Range.greaterThanOrEqual(37);
+    	let range2 = Range.greaterThanOrEqual(14);
+    	let range3 = Range.greaterThanOrEqual(37);
+
+    	expect(range1.contains(range2)).to.be.false;
+    	expect(range2.contains(range1)).to.be.true;
+    	expect(range1.contains(range3)).to.be.true;
+    });
+
+    it('correct containment for greaterThanOrEqual/greterThan/equals', () => {
+    	let range1 = Range.greaterThanOrEqual(37);
+    	let range2 = Range.equals(37);
+    	let range3 = Range.greaterThan(37);
+
+    	expect(range1.contains(range3)).to.be.true;
+    	expect(range1.contains(range2)).to.be.true;
+    	expect(range3.contains(range1)).to.be.false;
+    	expect(range3.contains(range2)).to.be.false;
     });
 
     it('correct containment for greaterThan/lessThan', ()=>{
@@ -163,6 +218,18 @@ describe('Range', () => {
     	expect(range1.intersect(range4)).to.deep.equal(Range.from([36,37]));
     	expect(range1.intersect(range5)).to.be.undefined;
     	expect(range1.intersect(range5)).to.be.undefined;
+    });
+
+    it('uses bounds objects in Range.from', () => {
+    	let range1 = Range.from({ ">":5});
+    	expect(range1).to.deep.equal(Range.greaterThan(5));
+    	let range2 = Range.from([2,8]);
+    	expect(range2).to.deep.equal(Range.between(2,8));
+    	expect(range2.lower_bound).to.deep.equal(Range.greaterThanOrEqual(2));
+    	expect(range2.upper_bound).to.deep.equal(Range.lessThan(8));
+    	let range3 = Range.from([{">":2}, {"<=":8}])
+    	expect(range3.upper_bound).to.deep.equal(Range.lessThanOrEqual(8));
+    	expect(range3.lower_bound).to.deep.equal(Range.greaterThan(2));
     });
 
 

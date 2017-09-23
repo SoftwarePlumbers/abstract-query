@@ -36,10 +36,6 @@ class Query {
 		this.cubes = cubes;
 	}
 
-	/** Types on which comparison operators are valid.
-	* @typedef {number|string|Date} Comparable
-	*/
-
 	/** A set of constraints.
 	*
 	* An object with properties names that represent field names on which a constraint is applied, and
