@@ -214,7 +214,14 @@ class OpenRange extends Range {
 	}
 
 	toString()	{ 
-		return `${this.operator} ${this.value}`; 
+		return this.toJSON().toString(); 
+	}
+
+
+	toJSON() {
+		return this.comparator.order === DEFAULT_ORDER 
+			? { [this.operator] : this.value }
+			: { [this.operator] : this.value, order : this.comparator.order.name }
 	}
 }
 
@@ -254,7 +261,11 @@ class Between extends Range {
 			&& this.upper_bound.equals(range.upper_bound); 
 		}
 
-	toString()							{ return `between(${this.lower_bound}, ${this.upper_bound})`; }
+	toString()	{ return this.toJSON().toString(); }
+
+	toJSON()	{
+		return [ this.lower_bound.toJSON(), this.upper_bound.toJSON() ];
+	}
 }
 
 class Equals extends Range {
@@ -283,7 +294,13 @@ class Equals extends Range {
 
 	equals(range)						{ return this.operator === range.operator && this.value === range.value; }
 
-	toString()							{ return `=${this.value}`; }
+	toString()							{ return this.toJSON().toString(); }
+
+	toJSON() {
+		return { 
+			[this.operator] : this.value
+		}
+	}
 }
 
 class LessThan extends OpenRange {
