@@ -1,5 +1,47 @@
 const Cube = require('./cube');
 const Stream = require('iterator-plumbing');
+const Range = require('./range');
+
+/**
+* The result of toExpression - can be any type, but the provided callbacks should all return the same type. Often a String.
+* @typedef {Object} QueryFormatter~Expression
+*/
+
+/**
+* @classdesc Interface for converting queries to expressions
+*
+* @name QueryFormatter
+* @class
+*/
+
+/**
+* Convert a number of sub-expressions into an 'or' expression
+*
+* @method
+* @name QueryFormatter#orExpr
+* @param {...Expression} subexpressions - subexpressions from which compound expression is built
+* @returns {Expression} an 'or' expression.
+*/
+
+/**
+* Convert a number of sub-expressions into an 'and' expression
+*
+* @method
+* @name QueryFormatter#andExpr
+* @param {...Expression} subexpressions - subexpressions from which compound expression is built
+* @returns {Expression} an 'and' expression.
+*/
+
+/**
+* Convert a number of sub-expressions into an 'and' expression
+*
+* @method
+* @name QueryFormatter#operExpr
+* @param {string} dimension - property or field name on which constraint operates
+* @param {string} operator - the constraint operatoer
+* @param {Expression|Comparable} value - the value for comparison
+* @returns {Expression} an operator expression.
+*/
 
 /** A Query represent an arbitrary set of constraints on a set of data.
 *
@@ -33,7 +75,7 @@ class Query {
 	* @param {Cube[]} cubes - An array of cubes.
 	*/
 	constructor(cubes = []) {
-		this.cubes = cubes;
+		this.union = cubes;
 	}
 
 	/** A set of constraints.
@@ -60,12 +102,27 @@ class Query {
 		return new Query( [ new Cube(obj) ] );
 	}
 
+	static isQuery(obj) {
+		return obj instanceof Query;
+	}
+
+	/** Get the default query formatter
+	* @returns {QueryFormatter} the default query formatter
+	*/
+	static get DEFAULT_FORMAT() {
+		return {
+    			andExpr(...ands) { return '(' + ands.join(') and (') + ')' }, 
+    			orExpr(...ors) { return ors.join(' or ') },
+    			operExpr(dimension, operator, value) { return dimension + operator + value }
+    	}
+	}
+
 	/** Delete any redundant critera from the query */
 	optimize() {
-		for (let i = 0; i < this.cubes.length; i++)
-			for (let j = 0; j < this.cubes.length; j++) 
-				if (this.cubes[i].contains(this.cubes[j])) {
-					delete this.cubes[j];
+		for (let i = 0; i < this.union.length; i++)
+			for (let j = 0; j < this.union.length; j++) 
+				if (this.union[i].contains(this.union[j])) {
+					delete this.union[j];
 				}
 	}
 
@@ -95,7 +152,7 @@ class Query {
 	factor(common) {
 		let result = [];
 		let remainder = [];
-		for (let cube of this.cubes) {
+		for (let cube of this.union) {
 			try {
 				let factored_cube = cube.removeConstraints(common);
 				result.push(factored_cube);
@@ -122,7 +179,7 @@ class Query {
 	*/
 	findFactor() {
 		let constraints = [];
-		for (let cube of this.cubes) {
+		for (let cube of this.union) {
 			for (let dimension in cube) {
 				let match = false;
 				for ( let bucket of constraints) {
@@ -143,47 +200,50 @@ class Query {
 		return bucket === undefined ? undefined : { [bucket.dimension] : bucket.range };
 	}
 
-	/**
-	* The result of toExpression - can be any type, but the provided callbacks should all return the same type. Often a String.
- 	* @typedef {Object} Expression
- 	*/
-
-	/**
- 	* Callback to build an compound expression from several sub-expressions.
- 	* @callback Query~compoundExprBuilder
- 	* @param {...Expression} subexpressions - subexpressions from which compound expression is built
- 	* @returns {Expression} a compound expression.
- 	*/
-
-	/**
- 	* Callback to build an atomic expression from a property name, an operator, and a value
- 	* @callback atomicExprBuilder
- 	* @param {string} name - Name of field on which constraint operates
- 	* @param {string} operator - operator (will be one of =,<,>,>=,<=)
- 	* @param {Object} value - value for constraint
- 	* @returns {Expression} an expression representing the atomic constraint.
- 	*/
 
 	/** Convert a query to a an expression.
 	*
-	* @param {Query~compoundExprBuilder} andExpr - Generate an 'and' expression from several subexpressions
-	* @param {Query~compoundExprBuilder} orExpr - Generate an 'or' expression from several subexpressions
-	* @param {atomicExprBuilder} operExpr - Generate a constraint expression from the name of the property, the operator type, and a value
+	* @param {QueryFormatter} [formatter=Query~DEFAULT_FORMATTER] - Generates expressions from element of a query
+	* @param {Context} [context] - context information
+	* @returns {Expression} expression - result expression. Typically a string but can be any type.
 	*/
-	toExpression(andExpr, orExpr, operExpr) {
-		if (this.cubes.length === 1) {
-			return andExpr(...Stream.fromProperties(this.cubes[0]).map(([dimension,range])=>range.toExpression(name, andExpr, operExpr)).toArray());
+	toExpression(formatter=Query.DEFAULT_FORMAT, context) {
+		if (this.union.length === 1) {
+			return formatter.andExpr(...Stream.fromProperties(this.union[0]).map(([dimension,range])=>range.toExpression(dimension,visitor,context)).toArray());
 		}
-		if (this.cubes.length > 1) {
+		if (this.union.length > 1) {
 			let factor = this.findFactor();
+
 			if (factor) {
 				let dimension = Object.keys(factor).shift();
 				let range = factor[dimension];
 				let { factored, remainder } = this.factor(factor);
-				if (factored && remainder) return orExpr(andExpr(range.toExpression(dimension, andExpr, operExpr), toExpression(factored)),toExpression(remainder));
-				if (factored) return andExpr(range.toExpression(dimension, andExpr, operExpr), toExpression(factored));
+
+
+				if (factored && remainder) 
+					return formatter.orExpr(
+						formatter.andExpr(
+							range.toExpression(dimension, formatter, context), 
+							factored.toExpression(formatter, context)
+						),
+						remainder.toExpression(formatter, context)
+					);
+
+				if (factored) 
+					return formatter.andExpr(
+						range.toExpression(dimension, formatter, context), 
+						factored.toExpression(formatter, context)
+					);
 			} else {
-				return orExpr(...this.cubes.map(cube => andExpr(...Stream.fromProperties(cube).map(([dimension,range])=>range.toExpression(dimension, andExpr, operExpr)).toArray())));
+				return formatter.orExpr(
+					...this.union.map(
+						cube => formatter.andExpr(
+							...Stream.fromProperties(cube).map(
+								([dimension,range])=>range.toExpression(dimension, formatter, context)
+							).toArray()
+						)
+					)
+				);
 			}
 
 		}
@@ -197,7 +257,7 @@ class Query {
 	_orCube(other_cube) {
 		let result = [];
 		let match = false;
-		for (let cube of this.cubes) {
+		for (let cube of this.union) {
 			if (cube.contains(other_cube)) {
 				match = true;
 				result.push(cube);
@@ -252,7 +312,7 @@ class Query {
 	*/
 	_andCube(other_cube) {
 		let result = [];
-		for (let cube of this.cubes) {
+		for (let cube of this.union) {
 			let intersection = cube.intersect(other_cube);
 			if (intersection) result.push(intersection);
 		}
@@ -276,7 +336,7 @@ class Query {
 	*/
 	andQuery(other_query) {
 		let result = other_query;
-		for (cube of this.cubes) {
+		for (cube of this.union) {
 			let result = result._andCube(cube);
 		}
 		return result;

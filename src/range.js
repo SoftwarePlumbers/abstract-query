@@ -13,8 +13,20 @@ function DEFAULT_ORDER (a,b) { return a < b };
 */
 
 /** Types on which comparison operators are valid.
-* @typedef {number|string|Date} Comparable
+* @typedef {number|string|boolean|Date} Comparable
 */
+
+
+/** Return true if object is one of the comparable types
+* @param object - object to test
+* @returns true if object is comparable (@see Comparable)
+*/
+function isComparable(object) {
+	let type = typeof object;
+	if (type === 'number' || type === 'string' || type == 'boolean') return true;
+	if (type === 'object' && object instanceof Date) return true;
+	return false;
+}
 
 /** Utility class - help compare values
 *
@@ -66,13 +78,17 @@ class Range {
 		return RANGE_OPERATORS;
 	}
 
-	/** Create a range containing a single value */
+	/** Create a range containing a single value 
+	* @param value - value to search for
+	* @returns {Range} a Range object
+	*/
 	static equals(value) 				
 	{ return new Equals(value); }
 
 	/** Create a range containing values less than a given value 
 	* @param value range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns {Range} a Range object
 	*/
 	static lessThan(value, order=DEFAULT_ORDER) 		
 	{ return new LessThan(value, order); }
@@ -80,6 +96,7 @@ class Range {
 	/** Create a range containing values less than or equal to a given value 
 	* @param value range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns {Range} a Range object
 	*/
 	static lessThanOrEqual(value, order=DEFAULT_ORDER) 		
 	{ return new LessThanOrEqual(value, order); }
@@ -87,6 +104,7 @@ class Range {
 	/** Create a range containing values greater than a given value 
 	* @param value range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns {Range} a Range object
 	*/		
 	static greaterThan(value, order=DEFAULT_ORDER) 	
 	{ return new GreaterThan(value, order); }
@@ -94,6 +112,7 @@ class Range {
 	/** Create a range containing values greater than or equal to a given value 
 	* @param value range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns {Range} a Range object
 	*/		
 	static greaterThanOrEqual(value, order=DEFAULT_ORDER) 	
 	{ return new GreaterThanOrEqual(value, order); }
@@ -102,11 +121,33 @@ class Range {
 	* @param lower - lower range boundary (inclusive)
 	* @param upper - upper range boundary (exclusive)
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns {Range} a Range object
 	*/
 	static between(lower, upper, order = DEFAULT_ORDER)	{ 
 		if (lower === upper) return Range.equals(lower);
 		if (!order(lower,upper)) return undefined;
 		return new Between(Range.greaterThanOrEqual(lower, order), Range.lessThan(upper, order));
+	}
+
+	/** Create a range with a subquery
+	*
+	* Objects we are querying may be complex. Where an object property contains an object or an array, we may
+	* what to execute a subquery on data contained by that object or array in order to determine if the origninal
+	* high-level object is matched or not. A trivial case would be a constraint that reads something like:
+	* ```
+	* 	{name : { last: 'Essex'}}
+	* ```
+	* to select objects with name.last equal to 'Essex'. This constraint can be constructed with: 
+	* ```
+	* 	{ name: Range.subquery(Query.fromConstraint({ last: Range.equals('Essex') } ) ) }
+	* ```
+	* However Range.from({last: 'Essex'}) should in most cases do the right thing more succinctly.
+	*
+	* @param query {Query} Subquery (which must select data for this range criterion to be satisfied)
+	* @returns {Range} a Range object
+	*/
+	static subquery(query) {
+		return new Subquery(query);
 	}
 
 	/** Check to see if an object is a Range 
@@ -140,47 +181,74 @@ class Range {
 
 	/** Create a range.
 	* 
-	* Specified bounds may be an array, an object, or a range
+	* Specified bounds may be an array, a {@link Comparable} object, a {@link Bounds} object, a {@link Query) object, 
+	* or a plain object that will be interpreted as a constraint. 
 	*
-	* @param {Range|Object|Array} bounds bounding values for range
+	* | Type 		| Result
+	* |-------------|-----------
+	* | Array 		| [a,b] -> Range.between(a,b); [a,] -> Range.greaterThanOrEqual(a); [,a] -> Range.lessThan(a)
+	* | Comparable  | Range.equals(bounds)
+	* | Bounds 		| Range.fromBounds(bounds)
+	* | Query 		| Range.subquery(bounds)
+	* | Object 		| Range.subquery(Query.fromConstraint(bounds))
+	* | Range 		| bounds
+	*
+	* @param {Comparable|Bounds|Query|Array|Range|Object} bounds bounding values for range
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns a range, or undefined if paramters are not compatible.
 	*/
 	static from(bounds, order = DEFAULT_ORDER) 	{ 
 
 		if (Array.isArray(bounds)) {
-			if (bounds.length > 0) {
-				let lower = bounds[0];
-				if (lower !== undefined && !Range.isRange(lower)) lower = Range.fromBounds(lower) || Range.greaterThanOrEqual(lower); 
-				if (bounds.length > 1) {					
-					let upper = bounds[1];
-					if (upper !== undefined && !Range.isRange(upper)) upper = Range.fromBounds(upper) || Range.lessThan(upper); 
-					if (bounds.length > 2) {
-						throw new RangeError('Range.from allows maximum of two bounds');
-					} else {
-						if (lower) {
-							if (lower.value === upper.value 
-								&& lower.operator === GreaterThanOrEqual.OPERATOR
-								&& upper.operator === LessThanOrEqual.OPERATOR) {
-								return new Equals(lower.value);
-							}
-							if (order(lower.value, upper.value)) {
-								return new Between(lower, upper);
-							}
-						} else {
-							return upper;
-						}
-					}
-				} else {
-					return lower;
-				}
+			let lower, upper;
+
+			if (bounds.length > 2 || bounds.length == 0) {
+				throw new RangeError('Range.from must provide one or two ');
 			}
 
-		} else {
-			return Range.isRange(bounds) ? bounds : Range.fromBounds(bounds) || Range.equals(bounds);
+			if (bounds.length > 0) {
+				lower = bounds[0];
+				if (lower !== undefined && lower !== null && !Range.isRange(lower)) 
+					lower = Range.fromBounds(lower) || Range.greaterThanOrEqual(lower,order);
+			}
+
+			if (bounds.length > 1) {					
+				upper = bounds[1];
+				if (upper !== undefined && upper !== null && !Range.isRange(upper)) 
+						upper = Range.fromBounds(upper) || Range.lessThan(upper,order); 
+			}
+
+			if (lower && upper) {
+				if (lower.value === upper.value 
+					&& lower.operator === GreaterThanOrEqual.OPERATOR
+					&& upper.operator === LessThanOrEqual.OPERATOR) {
+					return new Equals(lower.value);
+				}
+
+				if (order(lower.value, upper.value)) {
+					return new Between(lower, upper, order);
+				}
+			} else {
+				return upper || lower;
+			}
+			return undefined;
+		}
+		if (Range.isRange(bounds)) {
+			return bounds;
+		}
+		if (isComparable(bounds)) {
+			return Range.equals(bounds);
+		}
+		if (Query.isQuery(bounds)) {
+			return Range.contains(bounds);
+		}
+		
+		let fromBounds = Range.fromBounds(bounds);
+		if (fromBounds) {
+			return fromBounds;
 		}
 
-		return undefined;
+		return Range.subquery(Query.fromConstraint(bounds));
 	}
 }
 
@@ -205,8 +273,8 @@ class OpenRange extends Range {
 		this.operator = operator;
 	}
 
-	toExpression(dimension, and, operator)	{ 
-		return operator(dimension, this.operator, this.value); 
+	toExpression(dimension, formatter, context)	{ 
+		return formatter.operExpr(dimension, this.operator, this.value); 
 	}
 
 	equals(range)	{ 
@@ -217,11 +285,23 @@ class OpenRange extends Range {
 		return this.toJSON().toString(); 
 	}
 
+	toBoundsObject() {
+		if (this.comparator.order === DEFAULT_ORDER) {					
+			return { [this.operator] : this.value }
+		} else {
+			return { [this.operator] : this.value, order : this.comparator.order.name }
+		}	
+	}
 
 	toJSON() {
-		return this.comparator.order === DEFAULT_ORDER 
-			? { [this.operator] : this.value }
-			: { [this.operator] : this.value, order : this.comparator.order.name }
+		// Check to see if we have  a valid short form.
+		if (this.comparator.order === DEFAULT_ORDER) {
+			if (this.operator === GreaterThanOrEqual.OPERATOR)
+				return [this.value, undefined];
+			if ( this.operator === LessThan.OPERATOR)
+				return [undefined, this.value];
+		}
+		return this.toBoundsObject();
 	}
 }
 
@@ -246,10 +326,10 @@ class Between extends Range {
 		return result;
 	}
 
-	toExpression(dimension, and, operator)	{ 
-		return and(
-				this.lower_bound.toExpression(dimension, and, operator),
-				this.upper_bound.toExpression(dimension, and, operator)
+	toExpression(dimension, formatter, context)	{ 
+		return formatter.andExpr(
+				this.lower_bound.toExpression(dimension, formatter, context),
+				this.upper_bound.toExpression(dimension, formatter, context)
 			)
 	}
 
@@ -264,7 +344,20 @@ class Between extends Range {
 	toString()	{ return this.toJSON().toString(); }
 
 	toJSON()	{
-		return [ this.lower_bound.toJSON(), this.upper_bound.toJSON() ];
+		let lower_bound_json, upper_bound_json;
+
+		if (this.lower_bound.comparator.order === DEFAULT_ORDER && this.lower_bound.operator === GreaterThanOrEqual.OPERATOR)
+			lower_bound_json = this.lower_bound.value;
+		else  
+			lower_bound_json = lhis.lower_bound.toBoundsObject();
+
+		if (this.upper_bound.comparator.order === DEFAULT_ORDER && this.upper_bound.operator === LessThan.OPERATOR)
+			upper_bound_json = this.upper_bound.value;
+		else  
+			upper_bound_json = lhis.upper_bound.toBoundsObject();
+
+
+		return [ lower_bound_json, upper_bound_json ];
 	}
 }
 
@@ -290,16 +383,20 @@ class Equals extends Range {
 		return undefined;
 	}
 
-	toExpression(dimension, and, operator)	{ return operator(dimension, this.operator, this.value); }
+	toExpression(dimension, formatter, context)	{ 
+		return formatter.operExpr(dimension, this.operator, this.value); 
+	}
 
 	equals(range)						{ return this.operator === range.operator && this.value === range.value; }
 
 	toString()							{ return this.toJSON().toString(); }
 
+	toBoundsObject() {
+		return { [this.operator] : this.value }
+	}
+
 	toJSON() {
-		return { 
-			[this.operator] : this.value
-		}
+		return this.value;
 	}
 }
 
@@ -434,4 +531,48 @@ class GreaterThanOrEqual extends OpenRange {
 	}
 }
 
+class Subquery extends Range {
+
+	static get OPERATOR () { return 'contains'; }
+
+	constructor(query) {
+		super();
+		this.query = query;
+		this.operator = Subquery.OPERATOR;
+	}
+
+	contains(range) {
+		if (range.operator === Subquery.OPERATOR) return this.query.contains(range.query);
+		return false;
+	}
+
+	intersect(range) {
+		if (range.operator === Subquery.OPERATOR) return this.query.and(range.query);
+		return undefined;
+	}
+
+	toExpression(dimension, formatter, context) { 
+		return vistor.operExpr(dimension, this.operator, subquery.toExpression(formatter, { dimension, context })); 
+	}
+
+	equals(range) { 
+		return this.operator === range.operator && this.query.equals(range.query); 
+	}
+
+	toString()	{ 
+		return this.toJSON().toString(); 
+	}
+
+	toBoundsObject() {
+		return { [this.operator] : this.query }
+	}
+
+	toJSON() {
+		return this.query;
+	}	
+}
+
 module.exports = Range;
+
+// Cyclic dependency.
+var Query = require('./query');

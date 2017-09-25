@@ -45,13 +45,11 @@ describe('Range', () => {
     	expect(range1).to.deep.equal(Range.greaterThanOrEqual(5));
     });
 
-    it('toJSON creates bounds objects', ()=>{
+    it('toBoundsObject creates bounds objects', ()=>{
     	let range1 = Range.fromBounds({'=':5});
-    	expect(range1.toJSON()).to.deep.equal({'=':5});
+    	expect(range1.toBoundsObject()).to.deep.equal({'=':5});
     	range1 = Range.fromBounds({'<':5});
-    	expect(range1.toJSON()).to.deep.equal({'<':5});
-    	range1 = Range.from([2,7]);
-    	expect(range1.toJSON()).to.deep.equal([{'>=':2},{'<':7}]);    	
+    	expect(range1.toBoundsObject()).to.deep.equal({'<':5});
     });
 
     it('can compare ranges with equals', () => {
