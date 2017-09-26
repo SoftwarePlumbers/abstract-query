@@ -413,25 +413,47 @@ class Query {
 		return this.containsConstraint(obj);
 	}
 
+	/** Establish if this result of this query is the same as the given query.
+	*
+	* @param {Query} other_query - the other query
+	* @returns true if other query is a subset of this one.
+	*/
 	equalsQuery(other_query) {
 		let unmatched = Array.from(other_query.union);
+		// Complicated by the fact that this.union and other_query.union may not be in same order
 		for (let constraint of this.union) {
 			let index = unmatched.findIndex(item => constraint.equals(item));
 			if (index < 0) return false;
 			delete unmatched[index];
 		}
-		return unmatched.reduce(a=>a+1,0) === 0;
+		return unmatched.reduce(a=>a+1,0) === 0; // Array.length not change by delete
 	}
 
-	_equalsCube(other_cube) {
+	/** Establish if this result of this query is the same as the given cube.
+	*
+	* @private
+	* @param {Cube} cube - cube to compare
+	* @returns true if results of this query would be the same as the notional results for the cube.
+	*/
+	_equalsCube(cube) {
 		if (this.union.length != 1) return false;
-		return this.union[0].equals(other_cube);
+		return this.union[0].equals(cube);
 	}
 
+	/** Establish if this results of this query would be the same as for a query created from the given constraint.
+	*
+	* @param {Query~ConstraintObject} constraint - the constraint
+	* @returns true if constraint is the same as this query.
+	*/
 	equalsConstraint(other_constraint) {
 		return _equalsCube(new Cube(other_constraint));
 	}
 
+	/** Establish if this results of this query would be a superset of the given constraint or query.
+	*
+	* @param {Query~ConstraintObject|Query} obj - the constraint or query
+	* @returns true if obj is a subset of this query.
+	*/
 	equals(obj) {
 		if (obj instanceof Query) return this.equalsQuery(obj);
 		if (obj instanceof Cube) return this._equalsCube(obj);
