@@ -9,14 +9,14 @@ describe('Query', () => {
 
     it('can create query', () => {
     	let constraints = {x: Range.equals(2), y: Range.equals(4)};
-    	let query = Query.fromConstraint(constraints);
+    	let query = Query.from(constraints);
     	expect(query.union.length).to.equal(1);
     	expect(query.union[0]).to.deep.equal(constraints);
     });
 
     it('can use and to add constraints', () => {
     	let query = Query
-    		.fromConstraint({x: 2, y: 4})
+    		.from({x: 2, y: 4})
     		.and({ z: Range.equals(5)});
 
     	expect(query.union.length).to.equal(1);
@@ -25,7 +25,7 @@ describe('Query', () => {
 
     it('can use or to add constraints', () => {
     	let query = Query
-    		.fromConstraint({x: Range.equals(2), y: Range.equals(4)})
+    		.from({x: Range.equals(2), y: Range.equals(4)})
     		.or({ z: 5});
 
     	expect(query.union.length).to.equal(2);
@@ -35,14 +35,14 @@ describe('Query', () => {
 
     it('redundant constraints are suppressed', () => {
     	let query = Query
-    		.fromConstraint({x: Range.equals(2), y: Range.equals(4)})
+    		.from({x: Range.equals(2), y: Range.equals(4)})
     		.or({ x: Range.equals(2)});
 
     	expect(query.union.length).to.equal(1);
     	expect(query.union[0]).to.deep.equal({ x: Range.equals(2) }); 
 
     	query = Query
-    		.fromConstraint({x: Range.equals(2), y: Range.equals(4)})
+    		.from({x: Range.equals(2), y: Range.equals(4)})
     		.and({ x: Range.equals(2)});
 
     	expect(query.union.length).to.equal(1);
@@ -51,7 +51,7 @@ describe('Query', () => {
 
     it('creates expression', () => {
     	let query = Query
-    		.fromConstraint({x: [,2], y: 4})
+    		.from({x: [,2], y: 4})
     		.and({ z: 5})
     		.or({x:[6,8], y:3, z:99})
 
@@ -60,25 +60,36 @@ describe('Query', () => {
     	expect(expression).to.equal('(x<2 and y=4 and z=5 or x>=6 and x<8 and y=3 and z=99)');
     });    
 
+    it('creates expression with or', () => {
+    	let query = Query
+    		.from({x: [,2], y: 4})
+    		.and(Query.from({ z: 5}).or({z : 8}));
+
+    	let expression = query.toExpression();
+
+    	console.log(expression);
+    	expect(expression).to.equal('x<2 and y=4 and (z=5 or z=8)');
+    });
+
     it('factorizes', () => {
     	let query = Query
-    		.fromConstraint({x: 2, y : [3,4], z : 8})
+    		.from({x: 2, y : [3,4], z : 8})
     		.or({x:2, y: [,4], z: 7})
     		.or({x:3, y: [3,], z: 7});
 
     	let factored_part = Query
-    		.fromConstraint({y : [3,4], z : 8})
+    		.from({y : [3,4], z : 8})
     		.or({y: [,4], z: 7})
 
     	let { factored, remainder } = query.factor({ x: 2});
 
-    	expect(remainder).to.deep.equal(Query.fromConstraint({x:3, y: [3,], z: 7}));
+    	expect(remainder).to.deep.equal(Query.from({x:3, y: [3,], z: 7}));
     	expect(factored).to.deep.equal(factored_part);
     });
 
     it('has sane JSON representation', ()=>{
     	let query = Query
-    		.fromConstraint({x: 2, y : [3,4], z : 8})
+    		.from({x: 2, y : [3,4], z : 8})
     		.or({x:2, y: [,4], z: 7})
     		.or({x:3, y: [3,], z: 7});
     	let json = JSON.stringify(query);
@@ -86,7 +97,7 @@ describe('Query', () => {
     });
 
     it('can create subqueries', () => {
-    	let query = Query.fromConstraint({ currency: 'GBP', branch: { country: 'UK', type: 'accounting'} });
+    	let query = Query.from({ currency: 'GBP', branch: { country: 'UK', type: 'accounting'} });
     	let expr = query.toExpression();
     	console.log(expr);
     })

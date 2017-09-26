@@ -139,7 +139,7 @@ class Range {
 	* ```
 	* to select objects with name.last equal to 'Essex'. This constraint can be constructed with: 
 	* ```
-	* 	{ name: Range.subquery(Query.fromConstraint({ last: Range.equals('Essex') } ) ) }
+	* 	{ name: Range.subquery(Query.from({ last: Range.equals('Essex') } ) ) }
 	* ```
 	* However Range.from({last: 'Essex'}) should in most cases do the right thing more succinctly.
 	*
@@ -190,7 +190,7 @@ class Range {
 	* | Comparable  | Range.equals(bounds)
 	* | Bounds 		| Range.fromBounds(bounds)
 	* | Query 		| Range.subquery(bounds)
-	* | Object 		| Range.subquery(Query.fromConstraint(bounds))
+	* | Object 		| Range.subquery(Query.from(bounds))
 	* | Range 		| bounds
 	*
 	* @param {Comparable|Bounds|Query|Array|Range|Object} bounds bounding values for range
@@ -248,7 +248,7 @@ class Range {
 			return fromBounds;
 		}
 
-		return Range.subquery(Query.fromConstraint(bounds));
+		return Range.subquery(Query.from(bounds));
 	}
 }
 

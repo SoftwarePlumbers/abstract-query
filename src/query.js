@@ -78,7 +78,7 @@ class Query {
 
 	/** Construct a query from an array of cube objects.
 	*
-	* Should be considered a private constructor - use fromConstraint instead to create a query.
+	* Should be considered a private constructor - use from instead to create a query.
 	*
 	* @param {Cube[]} cubes - An array of cubes.
 	*/
@@ -101,12 +101,12 @@ class Query {
 	* The constraint object can have any number of properties. In the following example, the resulting
 	* query applies all the following constraints: w >= 3, x == 3, y >= 3, y < 7, z < 7
 	* @example
-1	* Query.fromConstraint({ w: [3,], x : 3, y : [3,7], z: [,7]})
+1	* Query.from({ w: [3,], x : 3, y : [3,7], z: [,7]})
 	*
 	* @param {Query~ConstraintObject} obj - A constraint object.
 	* @returns a Query
 	*/
-	static fromConstraint(obj) {
+	static from(obj) {
 		return new Query( [ new Cube(obj) ] );
 	}
 
@@ -153,14 +153,14 @@ class Query {
 	* Given something like: 
 	* ```
     *	let query = Query
-    *		.fromConstraint({x: 2, y : [3,4], z : 8})
+    *		.from({x: 2, y : [3,4], z : 8})
     *		.or({x:2, y: [,4], z: 7})
     *		.or({x:3, y: [3,], z: 7});
 	*
     *	let { factored, remainder } = query.factor({ x: 2});
 	* ```
-	* factored should equal `Query.fromConstraint({y : [3,4], z : 8}).or({y: [,4], z: 7})` and
-	* remainder should equal `Query.fromConstraint({x:3, y: [3,], z: 7})`
+	* factored should equal `Query.from({y : [3,4], z : 8}).or({y: [,4], z: 7})` and
+	* remainder should equal `Query.from({x:3, y: [3,], z: 7})`
 	*
 	* @param {ConstraintObject} constraint - object to factor out of query
 	* @return {Query~FactorResult} 
