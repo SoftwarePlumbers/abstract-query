@@ -274,7 +274,7 @@ class OpenRange extends Range {
 	}
 
 	toExpression(dimension, formatter, context)	{ 
-		return formatter.operExpr(dimension, this.operator, this.value); 
+		return formatter.operExpr(dimension, this.operator, this.value, context); 
 	}
 
 	equals(range)	{ 
@@ -384,7 +384,7 @@ class Equals extends Range {
 	}
 
 	toExpression(dimension, formatter, context)	{ 
-		return formatter.operExpr(dimension, this.operator, this.value); 
+		return formatter.operExpr(dimension, this.operator, this.value, context); 
 	}
 
 	equals(range)						{ return this.operator === range.operator && this.value === range.value; }
@@ -547,12 +547,12 @@ class Subquery extends Range {
 	}
 
 	intersect(range) {
-		if (range.operator === Subquery.OPERATOR) return this.query.and(range.query);
+		if (range.operator === Subquery.OPERATOR) return new Subquery(this.query.and(range.query));
 		return undefined;
 	}
 
 	toExpression(dimension, formatter, context) { 
-		return vistor.operExpr(dimension, this.operator, subquery.toExpression(formatter, { dimension, context })); 
+		return formatter.operExpr(dimension, this.operator, this.query.toExpression(formatter, { dimension, context }), context); 
 	}
 
 	equals(range) { 

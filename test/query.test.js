@@ -57,7 +57,7 @@ describe('Query', () => {
 
     	let expression = query.toExpression();
 
-    	expect(expression).to.equal('(x<2) and (y=4) and (z=5) or ((x>=6) and (x<8)) and (y=3) and (z=99)');
+    	expect(expression).to.equal('(x<2 and y=4 and z=5 or x>=6 and x<8 and y=3 and z=99)');
     });    
 
     it('factorizes', () => {
@@ -85,5 +85,10 @@ describe('Query', () => {
     	expect(json).to.equal('{"union":[{"x":2,"y":[3,4],"z":8},{"x":2,"y":[null,4],"z":7},{"x":3,"y":[3,null],"z":7}]}');
     });
 
+    it('can create subqueries', () => {
+    	let query = Query.fromConstraint({ currency: 'GBP', branch: { country: 'UK', type: 'accounting'} });
+    	let expr = query.toExpression();
+    	console.log(expr);
+    })
 
 });

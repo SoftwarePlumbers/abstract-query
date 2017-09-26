@@ -11,11 +11,20 @@ class Cube {
 		Stream.fromProperties(constraints).forEach(([k,v]) => this[k] = Range.from(v));
 	}
 
+	equals(other) {
+		let keys = Object.keys(this);
+		if (keys.length != Object.keys(other).length) return false;
+		for (let key of keys) {
+			if (!other[key] || !this[key].equals(other[key])) return false;
+		}
+		return true;
+	}
+
 	contains(other) {
 		return Stream
 			.fromProperties(this)
 			.every(([dimension,range]) => {
-				return  other[dimension] && other[dimension].contains(range);
+				return  other[dimension] && range.contains(other[dimension]);
 			});
 	}
 

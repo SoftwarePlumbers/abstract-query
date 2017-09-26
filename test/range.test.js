@@ -32,6 +32,11 @@ describe('Range', () => {
     	expect(range1.operator).to.equal('between');
     });
 
+    it('can create subquery', () => {
+    	let range1 = Range.from({ name: 'test'});
+    	expect(range1.query.union[0].name).to.deep.equal(Range.equals('test'));
+    });
+
     it('can create ranges from bounds object', ()=>{
     	let range1 = Range.fromBounds({'=':5});
     	expect(range1).to.deep.equal(Range.equals(5));
@@ -67,6 +72,11 @@ describe('Range', () => {
 		expect(range6.equals(range7)).to.be.true;
 		let range8 = Range.from([15,37]);
 		expect(range6.equals(range8)).to.be.false;
+		let range9 = Range.from({ name: 'morgan'});
+		let range10 = Range.from({ name: 'freeman'});
+		let range11 = Range.from({ name: 'morgan'});
+		expect (range9.equals(range10)).to.be.false;
+		expect (range9.equals(range11)).to.be.true;
     });
 
     it('correct containment for equals', () => {
@@ -168,6 +178,13 @@ describe('Range', () => {
     	expect(range1.contains(range6)).to.be.false;
     });
 
+    it('correct containment for subquery', ()=>{
+    	let range1 = Range.from({count: [3,]});
+    	let range2 = Range.from({count: [1,]});
+    	expect(range1.contains(range2)).to.be.false;
+    	expect(range2.contains(range1)).to.be.true;
+    });
+
     it('correct intersection for equals', () => {
     	let range1 = Range.equals(37);
     	let range2 = Range.equals(14);
@@ -227,6 +244,12 @@ describe('Range', () => {
     	expect(range1.intersect(range5)).to.be.undefined;
     });
 
+    it('correct intersection for subquery', () => {
+    	let range1 = Range.from({value: [3,10]});
+    	let range2 = Range.from({value: [5,12]});
+    	expect(range1.intersect(range2)).to.deep.equal(Range.from({value: [5,10]}));
+    });
+
     it('uses bounds objects in Range.from', () => {
     	let range1 = Range.from({ ">":5});
     	expect(range1).to.deep.equal(Range.greaterThan(5));
@@ -238,7 +261,5 @@ describe('Range', () => {
     	expect(range3.upper_bound).to.deep.equal(Range.lessThanOrEqual(8));
     	expect(range3.lower_bound).to.deep.equal(Range.greaterThan(2));
     });
-
-
 
 });

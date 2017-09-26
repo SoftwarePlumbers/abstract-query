@@ -3,8 +3,15 @@ const Stream = require('iterator-plumbing');
 const Range = require('./range');
 
 /**
-* The result of toExpression - can be any type, but the provided callbacks should all return the same type. Often a String.
+* The result of formatting a query - can be any type, but all the methods of QueryFormatter should all return the same type. Often a String.
 * @typedef {Object} QueryFormatter~Expression
+*/
+
+/** 
+* Context information for subqueries
+* @typedef {Object} QueryFormatter~Context
+* @property {string} dimension - name of parent property
+* @property {QueryFormatter~Context} context - parent context.
 */
 
 /**
@@ -19,8 +26,8 @@ const Range = require('./range');
 *
 * @method
 * @name QueryFormatter#orExpr
-* @param {...Expression} subexpressions - subexpressions from which compound expression is built
-* @returns {Expression} an 'or' expression.
+* @param {...QueryFormatter~Expression} subexpressions - subexpressions from which compound expression is built
+* @returns {QueryFormatter~Expression} an 'or' expression.
 */
 
 /**
@@ -28,8 +35,8 @@ const Range = require('./range');
 *
 * @method
 * @name QueryFormatter#andExpr
-* @param {...Expression} subexpressions - subexpressions from which compound expression is built
-* @returns {Expression} an 'and' expression.
+* @param {...QueryFormatter~Expression} subexpressions - subexpressions from which compound expression is built
+* @returns {QueryFormatter~Expression} an 'and' expression.
 */
 
 /**
@@ -39,8 +46,9 @@ const Range = require('./range');
 * @name QueryFormatter#operExpr
 * @param {string} dimension - property or field name on which constraint operates
 * @param {string} operator - the constraint operatoer
-* @param {Expression|Comparable} value - the value for comparison
-* @returns {Expression} an operator expression.
+* @param {QueryFormatter~Expression|Comparable} value - the value for comparison
+* @param {QueryFormatter~Context} context - for subqueries, contains chain of parent dimension names
+* @returns {QueryFormatter~Expression} an operator expression.
 */
 
 /** A Query represent an arbitrary set of constraints on a set of data.
@@ -110,10 +118,18 @@ class Query {
 	* @returns {QueryFormatter} the default query formatter
 	*/
 	static get DEFAULT_FORMAT() {
+
+		const printDimension = (context,name) => context ? printDimension(context.context, context.dimension) + "." + name : name;
+
 		return {
-    			andExpr(...ands) { return '(' + ands.join(') and (') + ')' }, 
-    			orExpr(...ors) { return ors.join(' or ') },
-    			operExpr(dimension, operator, value) { return dimension + operator + value }
+    		andExpr(...ands) { return ands.join(' and ') }, 
+    		orExpr(...ors) { return "(" + ors.join(' or ') + ")"},
+    		operExpr(dimension, operator, value, context) {
+    			if (operator === 'contains')
+    				return "(" + value + ")"
+    			else	
+    				return printDimension(context,dimension) + operator + value 
+    		}
     	}
 	}
 
@@ -209,7 +225,7 @@ class Query {
 	*/
 	toExpression(formatter=Query.DEFAULT_FORMAT, context) {
 		if (this.union.length === 1) {
-			return formatter.andExpr(...Stream.fromProperties(this.union[0]).map(([dimension,range])=>range.toExpression(dimension,visitor,context)).toArray());
+			return formatter.andExpr(...Stream.fromProperties(this.union[0]).map(([dimension,range])=>range.toExpression(dimension,formatter,context)).toArray());
 		}
 		if (this.union.length > 1) {
 			let factor = this.findFactor();
@@ -336,8 +352,8 @@ class Query {
 	*/
 	andQuery(other_query) {
 		let result = other_query;
-		for (cube of this.union) {
-			let result = result._andCube(cube);
+		for (let cube of this.union) {
+			result = result._andCube(cube);
 		}
 		return result;
 	}
@@ -351,6 +367,75 @@ class Query {
 		if (obj instanceof Query) return this.andQuery(obj);
 		if (obj instanceof Cube) return this._andCube(obj);
 		return this.andConstraint(obj);
+	}
+
+	/** Establish if this results of this query would be a superset of the given query.
+	*
+	* @param {Query} other_query - the other query
+	* @returns true if other query is a subset of this one.
+	*/
+	containsQuery(other_query) {
+		for (let cube of other_query.union)
+			if (!this._containsCube(cube)) return false
+		return true;
+	}
+
+	/** Establish if this results of this query would be a superset of the given cube.
+	*
+	* @private
+	* @param {Cube} cube - the cube
+	* @returns true if cube is a subset of this one.
+	*/
+	_containsCube(cube) {
+		for (let c of this.union) {
+			if (c.contains(cube)) return true;
+		}
+		return false;
+	}
+
+	/** Establish if this results of this query would be a superset of the given constraint.
+	*
+	* @param {Query~ConstraintObject} constraint - the constraint
+	* @returns true if constraint is a subset of this query.
+	*/
+	containsConstraint(donstraint) {
+		return this._containsCube(new Cube(constraint));
+	}
+
+	/** Establish if this results of this query would be a superset of the given constraint or query.
+	*
+	* @param {Query~ConstraintObject|Query} obj - the constraint or query
+	* @returns true if obj is a subset of this query.
+	*/
+	contains(obj) {
+		if (obj instanceof Query) return this.containsQuery(obj);
+		if (obj instanceof Cube) return this._containsCube(obj);
+		return this.containsConstraint(obj);
+	}
+
+	equalsQuery(other_query) {
+		let unmatched = Array.from(other_query.union);
+		for (let constraint of this.union) {
+			let index = unmatched.findIndex(item => constraint.equals(item));
+			if (index < 0) return false;
+			delete unmatched[index];
+		}
+		return unmatched.reduce(a=>a+1,0) === 0;
+	}
+
+	_equalsCube(other_cube) {
+		if (this.union.length != 1) return false;
+		return this.union[0].equals(other_cube);
+	}
+
+	equalsConstraint(other_constraint) {
+		return _equalsCube(new Cube(other_constraint));
+	}
+
+	equals(obj) {
+		if (obj instanceof Query) return this.equalsQuery(obj);
+		if (obj instanceof Cube) return this._equalsCube(obj);
+		return this.equalsConstraint(obj);
 	}
 }
 
