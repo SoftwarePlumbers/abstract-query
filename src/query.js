@@ -120,6 +120,7 @@ class Query {
 	static get DEFAULT_FORMAT() {
 
 		const printDimension = (context,name) => context ? printDimension(context.context, context.dimension) + "." + name : name;
+		const printValue = value => typeof value === 'string' ? '"' + value + '"' : value;
 
 		return {
     		andExpr(...ands) { return ands.join(' and ') }, 
@@ -128,7 +129,7 @@ class Query {
     			if (operator === 'contains')
     				return "(" + value + ")"
     			else	
-    				return printDimension(context,dimension) + operator + value 
+    				return printDimension(context,dimension) + operator + printValue(value) 
     		}
     	}
 	}

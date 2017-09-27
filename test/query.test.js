@@ -82,7 +82,7 @@ describe('Query', () => {
 
     	let expression = query.toExpression();
 
-    	expect(expression).to.equal('x<2 and (y.alpha>=2 and y.alpha<6 and (y.beta.nuts=brazil))');
+    	expect(expression).to.equal('x<2 and (y.alpha>=2 and y.alpha<6 and (y.beta.nuts="brazil"))');
     });
 
     it('has working equals operation', () => {
