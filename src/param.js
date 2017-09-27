@@ -1,4 +1,7 @@
 
+/** @typedef {Object} Param~ParamObject
+* @property {string} $ - the name of the parameter
+*/ 
 
 /** Class representing a query parameter than can be set later.
 */
@@ -9,15 +12,17 @@ class Param {
 	* @param {string} name - the name of the query parameter 
 	*/
 	constructor(name) {
-		this.name = name;
+		this.$ = name;
 	}
 
 	/** Create a new query parameter
 	*	
-	* @param {string} name - the name of the query parameter 
+	* @param {string|ParamObject} name - the name of the query parameter 
 	*/
 	static from(name) {
-		return new Param(name);
+		if (!name) throw new RangeError("Param.from must be supplied with a valid name");
+		if (typeof name === 'string') return new Param(name);
+		if (typeof name === 'object' && name.$) return new Param(name.$);
 	}
 
 	/** Compare parameters
@@ -27,7 +32,7 @@ class Param {
 	* @returns true if other.name equals this.name; false otherwise.
 	*/
 	equals(param) {
-		return param.name === this.name;
+		return param.$ === this.$;
 	}
 }
 
