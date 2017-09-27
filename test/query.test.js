@@ -143,5 +143,27 @@ describe('Query', () => {
     	expect(json).to.equal('{"union":[{"x":2,"y":[3,4],"z":8},{"x":2,"y":[null,4],"z":7},{"x":3,"y":[3,null],"z":7}]}');
     });
 
+    it('sample code for README.md tests OK', ()=>{
+    	let query = Query
+    		.from({ course: 'javascript 101', student: { age : [21,] }, grade: [,'C']})
+    		.or({ course: 'medieval French poetry', student: { age: [40,65]}, grade: [,'C']})
+
+    	let expr = query.toExpression();
+    	expect(expr).to.equal('grade<"C" and (course="javascript 101" and (student.age>=21) or course="medieval French poetry" and (student.age>=40 and student.age<65))');
+    
+		const formatter = {
+    		andExpr(...ands) { return ands.join(' and ') }, 
+    		orExpr(...ors) { return "(" + ors.join(' or ') + ")"},
+    		operExpr(dimension, operator, value, context) { 
+    			return (operator === 'contains')
+    				? dimension + "[" + value + "]"
+    				: dimension + operator + '"' + value + '"' 
+    		}
+    	}
+
+		let expr2 = query.toExpression(formatter);
+   		expect(expr2).to.equal('grade<"C" and (course="javascript 101" and student[age>="21"] or course="medieval French poetry" and student[age>="40" and age<"65"])');
+    });
+
 
 });
