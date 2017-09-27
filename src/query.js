@@ -305,9 +305,10 @@ class Query {
 	*/
 	orQuery(other_query) {
 		let result = this;
-		for (cube of other_query.cubes) {
-			result = result.orCube(cube);
+		for (let cube of other_query.union) {
+			result = result._orCube(cube);
 		}
+		return result;
 	}
 
 	/** Create a new query that will return the union of results in this query and with some other query or constraint.

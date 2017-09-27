@@ -33,6 +33,12 @@ describe('Query', () => {
     	expect(query.union[1]).to.deep.equal({ z: Range.equals(5) }); 
     });
 
+    it('can create subqueries', () => {
+    	let query = Query.from({ currency: 'GBP', branch: { country: 'UK', type: 'accounting'} });
+    	expect(query.union[0].branch.query.union[0].country.value).to.equal('UK');
+    	expect(query.union[0].branch.query.union[0].type.value).to.equal('accounting');
+    })
+
     it('redundant constraints are suppressed', () => {
     	let query = Query
     		.from({x: Range.equals(2), y: Range.equals(4)})
@@ -67,8 +73,32 @@ describe('Query', () => {
 
     	let expression = query.toExpression();
 
-    	console.log(expression);
     	expect(expression).to.equal('x<2 and y=4 and (z=5 or z=8)');
+    });
+
+    it('creates expression with subquery', () => {
+    	let query = Query
+    		.from({x: [,2], y: { alpha: [2,6], beta: { nuts: 'brazil' }}});
+
+    	let expression = query.toExpression();
+
+    	expect(expression).to.equal('x<2 and (y.alpha>=2 and y.alpha<6 and (y.beta.nuts=brazil))');
+    });
+
+    it('has working equals operation', () => {
+    	let query1 = Query
+    		.from({x: [,2], y: { alpha: [2,6], beta: { nuts: 'brazil' }}});
+    	let query2 = Query
+    		.from({y: { beta: { nuts: 'brazil' }, alpha: [2,6]}, x: [,2]});
+    	let query3 = Query
+    		.from({x: [,2], y: { alpha: [2,8], beta: { nuts: 'walnut' }}});
+    	let query4 = Query
+    		.from({x: [1,9], y: { alpha: [2,8], beta: { nuts: 'walnut' }}});
+    	expect(query1.equals(query2)).to.be.true;
+    	expect(query1.equals(query3)).to.be.false;
+    	expect(query1.equals(query4)).to.be.false;
+    	expect(query1.and(query3).equals(query3.and(query1))).to.be.true;
+    	expect(query1.or(query3).equals(query3.or(query1))).to.be.true;
     });
 
     it('factorizes', () => {
@@ -96,10 +126,5 @@ describe('Query', () => {
     	expect(json).to.equal('{"union":[{"x":2,"y":[3,4],"z":8},{"x":2,"y":[null,4],"z":7},{"x":3,"y":[3,null],"z":7}]}');
     });
 
-    it('can create subqueries', () => {
-    	let query = Query.from({ currency: 'GBP', branch: { country: 'UK', type: 'accounting'} });
-    	let expr = query.toExpression();
-    	console.log(expr);
-    })
 
 });
