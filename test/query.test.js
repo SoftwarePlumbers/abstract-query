@@ -101,6 +101,23 @@ describe('Query', () => {
     	expect(query1.or(query3).equals(query3.or(query1))).to.be.true;
     });
 
+    it('has working contains operation', () => {
+    	let query1 = Query
+    		.from({x: [,2], y: { alpha: [2,6], beta: { nuts: 'brazil' }}});
+    	let query2 = Query
+    		.from({y: { beta: { nuts: 'brazil' }, alpha: [2,6]}, x: [,2]});
+    	let query3 = Query
+    		.from({x: [1,2], y: { alpha: [2,8], beta: { nuts: 'walnut' }}});
+    	let query4 = Query
+    		.from({x: [1,9], y: { alpha: [2,8], beta: { nuts: 'walnut' }}});
+    	expect(query1.contains(query2)).to.be.true; // because equal
+    	expect(query1.contains(query3)).to.be.false; // walnut != brazil
+    	expect(query1.contains(query4)).to.be.false; // [,2] doesn't contain [1,9]
+    	expect(query4.contains(query3)).to.be.true; 
+    	expect(query1.or(query4).contains(query1)).to.be.true;
+    	expect(query1.contains(query1.and(query4))).to.be.true;
+   	});
+
     it('factorizes', () => {
     	let query = Query
     		.from({x: 2, y : [3,4], z : 8})
