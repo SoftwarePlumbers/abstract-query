@@ -6,11 +6,18 @@ Abstract query, providing for client-side optimisation of queries.
 
 ```javascript
 
-   	let query = Query
-    		.from({ course: 'javascript 101', student: { age : [21,] }, grade: [,'C']})
-    		.or({ course: 'medieval French poetry', student: { age: [40,65]}, grade: [,'C']})
+let query = Query
+	.from({ 
+		course: 'javascript 101', 
+		student: { age : [21,] }, 
+		grade: [,'C']
+	}).or({ 
+		course: 'medieval French poetry', 
+		student: { age: [40,65]}, 
+		grade: [,'C']
+	})
 
-    let expr = query.toExpression();
+let expr = query.toExpression();
 ```
 
 and expression should equal:
@@ -22,16 +29,16 @@ Note that the common expression `grade<"C"` has been factored out of the 'or'. P
 The `toExpression` method takes a formatter object so that query objects can be used to create any kind of output. For example:
 
 ```javascript
-	const formatter = {
-    	andExpr(...ands) { return ands.join(' && ') }, 
-    	orExpr(...ors) { return "(" + ors.join(' || ') + ")"},
-    	operExpr(dimension, operator, value, context) { 
-    		return (operator === 'contains')
-    			? dimension"[" + value + "]"
-    			: dimension + operator +value 
-    	}
+const formatter = {
+	andExpr(...ands) { return ands.join(' && ') }, 
+	orExpr(...ors) { return "(" + ors.join(' || ') + ")"},
+	operExpr(dimension, operator, value, context) { 
+		return (operator === 'contains')
+			? dimension"[" + value + "]"
+			: dimension + operator +value 
+	}
 
-    let expr = query.toExpression(formatter)
+let expr = query.toExpression(formatter)
 ```
 
 Will result in an expr like: 
@@ -43,13 +50,13 @@ The objective is to provide several different expression formatters, to support 
 Abstract query will also aid in building any kind of caching layer. Because abstract-query actually stores the query in an internal canoncial form, two queries can be compared for equality even if they are outwardly somewhat different. Thus:
 
 ```javascript
-   	let query1 = Query.from({x: [,2], y: { alpha: [2,6], beta: { nuts: 'brazil' }}});
-    let query2 = Query.from({y: { beta: { nuts: 'brazil' }, alpha: [2,6]}, x: [,2]});
-    let query3 = query1.and(query2);
-    let query4 = query2.and(query1);
+let query1 = Query.from({x: [,2], y: { alpha: [2,6], beta: { nuts: 'brazil' }}});
+let query2 = Query.from({y: { beta: { nuts: 'brazil' }, alpha: [2,6]}, x: [,2]});
+let query3 = query1.and(query2);
+let query4 = query2.and(query1);
 
-    query1.equals(query2) // true
-    query3.equals(query4) // true
+query1.equals(query2) // true
+query3.equals(query4) // true
 ```
 
 Even better, query.contains allows you to detect whether one query is a subset of another; thus data can be potentially be retrieved by just filtering an existing cached result set rather than requerying the data store for data we already have.
