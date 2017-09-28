@@ -25,6 +25,19 @@ class Param {
 		if (typeof name === 'object' && name.$) return new Param(name.$);
 	}
 
+	/** Check in an object is a paramter
+	*
+	* @param {Object} obj - object to check
+	* @returns true of obj is a Param
+	*/
+	static isParam(obj) {
+		return obj instanceof Param;
+	}
+
+	static isParamObject(obj) {
+		return obj.$ !== undefined;
+	}
+
 	/** Compare parameters
 	*
 	* Parameters are considered equal if their names are equal.

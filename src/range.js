@@ -1,3 +1,5 @@
+const { Param } = require('./param');
+
 /** Default comparator.
 * @param a first parameter
 * @param b second parameter
@@ -79,14 +81,14 @@ class Range {
 	}
 
 	/** Create a range containing a single value 
-	* @param value - value to search for
+	* @param {Object|Param} value - value to search for
 	* @returns {Range} a Range object
 	*/
 	static equals(value) 				
 	{ return new Equals(value); }
 
 	/** Create a range containing values less than a given value 
-	* @param value range boundary
+	* @param {Object|Param} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/
@@ -94,7 +96,7 @@ class Range {
 	{ return new LessThan(value, order); }
 
 	/** Create a range containing values less than or equal to a given value 
-	* @param value range boundary
+	* @param {Object|Param} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/
@@ -102,7 +104,7 @@ class Range {
 	{ return new LessThanOrEqual(value, order); }
 
 	/** Create a range containing values greater than a given value 
-	* @param value range boundary
+	* @param {Object|Param} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/		
@@ -110,7 +112,7 @@ class Range {
 	{ return new GreaterThan(value, order); }
 
 	/** Create a range containing values greater than or equal to a given value 
-	* @param value range boundary
+	* @param {Object|Param} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/		
@@ -118,8 +120,8 @@ class Range {
 	{ return new GreaterThanOrEqual(value, order); }
 
 	/** Create a range containing values between the given values
-	* @param lower - lower range boundary (inclusive)
-	* @param upper - upper range boundary (exclusive)
+	* @param {Object|Param} lower - lower range boundary (inclusive)
+	* @param {Object|Param} upper - upper range boundary (exclusive)
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/
@@ -165,18 +167,41 @@ class Range {
 	* @typedef {Object<string,Comparable>} Range~Bounds
 	*/
 
-	/** Create a range from a bounds object 
+	/** Create a range from a bounds expression
 	*
-	* A bounds object is an object in the form { "<operator>" : value } (e.g. { ">" : 7 }). Returns
-	* null if obj is not a valid bounds object.
-	* @param {Range~Bounds} bounds object
+	* A bounds expression may be a bounds object, a simple comparable value,  a parameter, or a Range
+	*
+	* @param {Range~Bounds|Param|Comparable|Range} bounds object
+	@ @param {Function} default_constructor - constructor to use if Param or Comparable is provided
+	* @param {Range~OrderingFunction} order - compare two values and return true if the first is less than the second.
 	* @returns a range
 	*/
-	static fromBounds(obj) {
+	static fromBounds(obj, default_constructor, order) {
+
+		if (!obj) return obj;
+		if (Range.isRange(obj)) return obj;
+
 		let propname = Object.keys(obj)[0];
 		let constructor = Range.OPERATORS[propname];
-		if (constructor) return constructor(obj[propname]);
-		return null;
+		
+		let value;
+
+		// if Range.OPERATORS contained a value, we have a bounds object
+		if (constructor) { 
+			value = obj[propname];
+		} else {
+			value = obj;
+		}
+
+		// Try to see if we have a parameter object
+		value = Param.isParamObject(value) ? Param.from(value) : value;
+		
+		return constructor ? constructor(value, order) : default_constructor(value, order);
+	}
+
+	static isBounds(obj) {
+		let propname = Object.keys(obj)[0];
+		return propname && Range.OPERATORS[propname] || isComparable(obj) || Param.isParam(obj) || Range.isRange(obj) || obj.$;
 	}
 
 	/** Create a range.
@@ -207,15 +232,11 @@ class Range {
 			}
 
 			if (bounds.length > 0) {
-				lower = bounds[0];
-				if (lower !== undefined && lower !== null && !Range.isRange(lower)) 
-					lower = Range.fromBounds(lower) || Range.greaterThanOrEqual(lower,order);
+				lower = Range.fromBounds(bounds[0], Range.greaterThanOrEqual, order);
 			}
 
 			if (bounds.length > 1) {					
-				upper = bounds[1];
-				if (upper !== undefined && upper !== null && !Range.isRange(upper)) 
-						upper = Range.fromBounds(upper) || Range.lessThan(upper,order); 
+				upper = Range.fromBounds(bounds[1], Range.lessThan, order);
 			}
 
 			if (lower && upper) {
@@ -233,22 +254,15 @@ class Range {
 			}
 			return undefined;
 		}
-		if (Range.isRange(bounds)) {
-			return bounds;
-		}
-		if (isComparable(bounds)) {
-			return Range.equals(bounds);
-		}
+
 		if (Query.isQuery(bounds)) {
-			return Range.contains(bounds);
+			return Range.subquery(bounds);
 		}
 		
-		let fromBounds = Range.fromBounds(bounds);
-		if (fromBounds) {
-			return fromBounds;
-		}
-
-		return Range.subquery(Query.from(bounds));
+		if (order !== DEFAULT_ORDER || Range.isBounds(bounds)) 
+			return Range.fromBounds(bounds, Range.equals, order)
+		else
+			return Range.subquery(Query.from(bounds)); 
 	}
 }
 
