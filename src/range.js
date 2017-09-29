@@ -42,14 +42,22 @@ class Comparator {
 		this.order = order;
 	}
 
-	/** @returns {boolean} true if a < b */
-	lessThan(a,b) 			{ return this.order(a,b); }
-	/** @returns {boolean} true if a > b */
-	greaterThan(a,b) 		{ return this.order(b,a); }
-	/** @returns {boolean} true if a <= b */
-	greaterThanOrEqual(a,b) { return !this.lessThan(a,b); }
-	/** @returns {boolean} true if a >= b */
-	lessThanOrEqual(a,b) 	{ return !this.greaterThan(a,b); }
+
+	/** @returns true if a or b is a parameter */
+	static params(a,b) 		{ return Param.isParam(a) || Param.isParam(b); }
+	/** @returns true if a and b are both the same parameter */
+	static paramsEqual(a,b) { return Param.isParam(a) && Param.isParam(b) && a.equals(b); }
+
+	/** @returns {boolean} true if a = b or a and b are both the same parameter, null if either is a parameter and they are not equal, false otherwise */ 
+	equals(a,b)				{ return Comparator.paramsEqual(a,b) || (Comparator.params(a,b) ? null : !this.order(a,b) && !this.order(b,a)); }
+	/** @returns {boolean} true if a < b or null if a or b is a parameter */
+	lessThan(a,b) 			{ return Comparator.params(a,b) ? (Comparator.paramsEqual(a,b) ? false : null) : this.order(a,b); }
+	/** @returns {boolean} true if a > b or null if a or b is a parameter */
+	greaterThan(a,b) 		{ return Comparator.params(a,b) ? (Comparator.paramsEqual(a,b) ? false : null) : this.order(b,a); }
+	/** @returns {boolean} true if a <= b or a and b are both the same parameter, null if either is a parameter and they are not equal, false otherwise */
+	greaterThanOrEqual(a,b) { return Comparator.paramsEqual(a,b) || (Comparator.params(a,b) ? null : !this.order(a,b)); }
+	/** @returns {boolean} true if a >= b or a and b are both the same parameter, null if either is a parameter and they are not equal, false otherwise */
+	lessThanOrEqual(a,b) 	{ return Comparator.paramsEqual(a,b) || (Comparator.params(a,b) ? null : !this.order(b,a)); }
 }
 
 /** Range is an abstract class representing a range of values.
@@ -80,55 +88,86 @@ class Range {
 		return RANGE_OPERATORS;
 	}
 
+	/** @typedef {Object|Param|Param~ParamObject} Range~SimpleValue
+	*
+	* A value that can be used as a parameter when creating a simple range (e.g. with Range.equals, Range.lessThan, etc)
+	*/
+
 	/** Create a range containing a single value 
-	* @param {Object|Param} value - value to search for
+	*
+	* @param {Range~SimpleValue} value - value to search for
+	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/
-	static equals(value) 				
-	{ return new Equals(value); }
+	static equals(value, order=DEFAULT_ORDER) 				
+	{ return new Equals( Param.isParamObject(value) ? Param.from(value) : value, order); }
 
 	/** Create a range containing values less than a given value 
-	* @param {Object|Param} value - range boundary
+	*
+	* @param {Range~SimpleValue} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/
 	static lessThan(value, order=DEFAULT_ORDER) 		
-	{ return new LessThan(value, order); }
+	{ return new LessThan(Param.isParamObject(value) ? Param.from(value) : value, order); }
 
 	/** Create a range containing values less than or equal to a given value 
-	* @param {Object|Param} value - range boundary
+	* @param {Range~SimpleValue} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/
 	static lessThanOrEqual(value, order=DEFAULT_ORDER) 		
-	{ return new LessThanOrEqual(value, order); }
+	{ return new LessThanOrEqual(Param.isParamObject(value) ? Param.from(value) : value, order); }
 
 	/** Create a range containing values greater than a given value 
-	* @param {Object|Param} value - range boundary
+	* @param {Range~SimpleValue} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/		
 	static greaterThan(value, order=DEFAULT_ORDER) 	
-	{ return new GreaterThan(value, order); }
+	{ return new GreaterThan(Param.isParamObject(value) ? Param.from(value) : value, order); }
 
 	/** Create a range containing values greater than or equal to a given value 
-	* @param {Object|Param} value - range boundary
+	* @param {Range~SimpleValue} value - range boundary
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/		
 	static greaterThanOrEqual(value, order=DEFAULT_ORDER) 	
-	{ return new GreaterThanOrEqual(value, order); }
+	{ return new GreaterThanOrEqual(Param.isParamObject(value) ? Param.from(value) : value, order); }
+
+	/** @typdef {Range~SimpleValue|Range|Range~Bounds} Range~BetweenValue
+	* Either a simple value or something that can be converted into a simple range.
+	*/
 
 	/** Create a range containing values between the given values
-	* @param {Object|Param} lower - lower range boundary (inclusive)
-	* @param {Object|Param} upper - upper range boundary (exclusive)
+	*
+	* @param {Range~BetweenValue} lower - lower range boundary (inclusive by default)
+	* @param {Range~BetweenValue} upper - upper range boundary (exclusive by default)
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a Range object
 	*/
 	static between(lower, upper, order = DEFAULT_ORDER)	{ 
-		if (lower === upper) return Range.equals(lower);
-		if (!order(lower,upper)) return undefined;
-		return new Between(Range.greaterThanOrEqual(lower, order), Range.lessThan(upper, order));
+
+		let comparator = new Comparator(order);
+
+		lower = Range.fromValue(lower, Range.greaterThanOrEqual, order);
+		upper = Range.fromValue(upper, Range.lessThan, order);
+
+		if (lower && upper) {
+			if (comparator.equals(lower.value, upper.value) 
+				&& lower.operator === GreaterThanOrEqual.OPERATOR
+				&& upper.operator === LessThanOrEqual.OPERATOR) {
+					return new Equals(lower.value);
+				}
+
+			let comparison = comparator.lessThan(lower.value, upper.value);
+			if (comparison ===  null || comparison) {
+				return new Between(lower, upper, order);
+			}
+		} else {
+			return upper || lower;
+		}
+		return undefined;
 	}
 
 	/** Create a range with a subquery
@@ -164,63 +203,86 @@ class Range {
 	* An object with a single property key that is one of the operators defined in Range.OPERATORS. The value
 	* of the property should be comparable.
 	*
-	* @typedef {Object<string,Comparable>} Range~Bounds
+	* @typedef {Object<string,Range~SimpleValue>} Range~Bounds
 	*/
 
-	/** Create a range from a bounds expression
+	/** Create a range from a bounds object
 	*
-	* A bounds expression may be a bounds object, a simple comparable value,  a parameter, or a Range
-	*
-	* @param {Range~Bounds|Param|Comparable|Range} bounds object
-	@ @param {Function} default_constructor - constructor to use if Param or Comparable is provided
-	* @param {Range~OrderingFunction} order - compare two values and return true if the first is less than the second.
-	* @returns a range
+	* @param {Range~Bounds} obj
+	* @return {Range} a range if obj is a bounds object, null otherwise
 	*/
-	static fromBounds(obj, default_constructor, order) {
+	static fromBounds(obj) {
+		let propname = Object.keys(obj)[0];
+		let constructor = Range.OPERATORS[propname];
+		
+		if (constructor) { 
+			let value = obj[propname];
+			value = Param.isParamObject(value) ? Param.from(value) : value;
+			return constructor(value, DEFAULT_ORDER);
+		} 
+
+		return null;
+	}
+
+	/** Create a range from a single value
+	*
+	* The parameter 'obj' may be a bounds object, a simple value, a parameter a Query, or a Range. The result
+	* varies according to the type of obj, and whether an explicit order function is provided.
+	*
+	* | Type of obj 	 | order 	| Result
+	* |------------------|-------------------
+	* | null			 | 			| null
+	* | undefined		 | 			| undefined
+	* | Range 			 | 			| obj
+	* | Query 			 | 			| Range.subquery(obj)
+	* | Range~Bounds 	 | 			| Range.fromBounds(obj)
+	* | Param 			 | 			| default_constructor(obj, order)
+	* | Param~ParamObject| 			| default_constructor(Param.from(obj), order)
+	* | Object 			 | provided | default_constructor(obj, order)
+	* | Object 			 | default 	| Range.subquery(Query.from(obj)) 
+	*
+	* @param {Range~BetweenValue|Query} obj - value
+	@ @param {Function} [default_constructor=Range.equals] - constructor to use if Param or Comparable is provided
+	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns {Range} a range
+	*/
+	static fromValue(obj, default_constructor = Range.equals, order = DEFAULT_ORDER) {
 
 		if (!obj) return obj;
 		if (Range.isRange(obj)) return obj;
+		if (Query.isQuery(obj)) return Range.subquery(obj);
 
 		let propname = Object.keys(obj)[0];
 		let constructor = Range.OPERATORS[propname];
 		
-		let value;
-
 		// if Range.OPERATORS contained a value, we have a bounds object
 		if (constructor) { 
-			value = obj[propname];
+			let value = obj[propname];
+			value = Param.isParamObject(value) ? Param.from(value) : value;
+			return constructor(value, order);
 		} else {
-			value = obj;
+			let value = Param.isParamObject(obj) ? Param.from(obj) : obj;
+			if (typeof value !== 'object' || Param.isParam(value) || order !== DEFAULT_ORDER)
+				return default_constructor(value, order)
+			else
+				return Range.subquery(Query.from(value));
 		}
 
-		// Try to see if we have a parameter object
-		value = Param.isParamObject(value) ? Param.from(value) : value;
-		
-		return constructor ? constructor(value, order) : default_constructor(value, order);
-	}
-
-	static isBounds(obj) {
-		let propname = Object.keys(obj)[0];
-		return propname && Range.OPERATORS[propname] || isComparable(obj) || Param.isParam(obj) || Range.isRange(obj) || obj.$;
 	}
 
 	/** Create a range.
 	* 
-	* Specified bounds may be an array, a {@link Comparable} object, a {@link Bounds} object, a {@link Query) object, 
-	* or a plain object that will be interpreted as a constraint. 
+	* Specified bounds may be an array, or any object supported by Range.fromValue
 	*
-	* | Type 		| Result
-	* |-------------|-----------
-	* | Array 		| [a,b] -> Range.between(a,b); [a,] -> Range.greaterThanOrEqual(a); [,a] -> Range.lessThan(a)
-	* | Comparable  | Range.equals(bounds)
-	* | Bounds 		| Range.fromBounds(bounds)
-	* | Query 		| Range.subquery(bounds)
-	* | Object 		| Range.subquery(Query.from(bounds))
-	* | Range 		| bounds
+	* | Type 				 | Result
+	* |----------------------|-----------
+	* | Range~BetweenValue[] | [a,b] -> Range.between(Range.fromBounds(a,Range.greaterThanOrEqual, order), Range.fromBounds(b,Range.lessThan, order))
+	* | Range~BetweenValue 	 | Range.fromValue(object)
+	* | Query 	 			 | Range.fromValue(object)
 	*
-	* @param {Comparable|Bounds|Query|Array|Range|Object} bounds bounding values for range
+	* @param {Range~BetweenValue|Range~BetweenValue[]|Query} bounds bounding values for range
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
-	* @returns a range, or undefined if paramters are not compatible.
+	* @returns {Range} a range, or undefined if paramters are not compatible.
 	*/
 	static from(bounds, order = DEFAULT_ORDER) 	{ 
 
@@ -232,37 +294,17 @@ class Range {
 			}
 
 			if (bounds.length > 0) {
-				lower = Range.fromBounds(bounds[0], Range.greaterThanOrEqual, order);
+				lower = Range.fromValue(bounds[0], Range.greaterThanOrEqual, order);
 			}
 
 			if (bounds.length > 1) {					
-				upper = Range.fromBounds(bounds[1], Range.lessThan, order);
+				upper = Range.fromValue(bounds[1], Range.lessThan, order);
 			}
 
-			if (lower && upper) {
-				if (lower.value === upper.value 
-					&& lower.operator === GreaterThanOrEqual.OPERATOR
-					&& upper.operator === LessThanOrEqual.OPERATOR) {
-					return new Equals(lower.value);
-				}
-
-				if (order(lower.value, upper.value)) {
-					return new Between(lower, upper, order);
-				}
-			} else {
-				return upper || lower;
-			}
-			return undefined;
+			return Range.between(lower,upper);
 		}
 
-		if (Query.isQuery(bounds)) {
-			return Range.subquery(bounds);
-		}
-		
-		if (order !== DEFAULT_ORDER || Range.isBounds(bounds)) 
-			return Range.fromBounds(bounds, Range.equals, order)
-		else
-			return Range.subquery(Query.from(bounds)); 
+		return Range.fromValue(bounds, Range.equals, order)
 	}
 }
 
@@ -292,7 +334,7 @@ class OpenRange extends Range {
 	}
 
 	equals(range)	{ 
-		return this.operator === range.operator && this.value === range.value; 
+		return this.operator === range.operator && this.comparator.equals(this.value,range.value); 
 	}
 
 	toString()	{ 
@@ -317,6 +359,7 @@ class OpenRange extends Range {
 		}
 		return this.toBoundsObject();
 	}
+
 }
 
 
@@ -379,10 +422,11 @@ class Equals extends Range {
 
 	static get OPERATOR () { return '='; }
 
-	constructor(value) {
+	constructor(value, order) {
 		super();
 		this.value = value;
 		this.operator = Equals.OPERATOR;
+		this.comparator = new Comparator(order);
 	}
 
 	contains(range) {
@@ -392,7 +436,7 @@ class Equals extends Range {
 	intersect(range) {
 		if (range.operator !== Equals.OPERATOR) 
 			return (range.intersect(this));
-		if (this.value === range.value)
+		if (this.comparator.equals(this.value,range.value))
 			return this;
 		return undefined;
 	}
@@ -401,7 +445,7 @@ class Equals extends Range {
 		return formatter.operExpr(dimension, this.operator, this.value, context); 
 	}
 
-	equals(range)						{ return this.operator === range.operator && this.value === range.value; }
+	equals(range)						{ return this.operator === range.operator && this.comparator.equals(this.value, range.value) }
 
 	toString()							{ return this.toJSON().toString(); }
 

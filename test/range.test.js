@@ -1,4 +1,5 @@
 const Range = require( '../src/range');
+const { Param, $ } = require('../src/param');
 const chai = require('chai');
 const debug = require('debug')('abstract-query~tests');
 const expect = chai.expect;
@@ -77,6 +78,33 @@ describe('Range', () => {
 		let range11 = Range.from({ name: 'morgan'});
 		expect (range9.equals(range10)).to.be.false;
 		expect (range9.equals(range11)).to.be.true;
+
+    });
+
+    it('can compare parametrized ranges with equals', () => {
+        let range1 = Range.equals(37);
+        let range2 = Range.equals($.param1);
+        let range3 = Range.equals($.param2);
+        let range4 = Range.equals($.param1);
+        expect (range2.equals(range3)).to.be.null;
+        expect (range2.equals(range4)).to.be.true;
+        expect (range2.equals(range1)).to.be.null;
+        expect (range1.equals(range2)).to.be.null;
+
+        let range5 = Range.lessThan($.param1);
+        let range6 = Range.lessThan($.param1);
+        let range7 = Range.lessThan($.param2);
+        expect(range5.equals(range6)).to.be.true;
+        expect(range5.equals(range7)).to.be.null;
+        expect(range1.equals(range5)).to.be.false;
+
+        let range8 = Range.from([5, $.param2]);
+        let range9 = Range.from([5, $.param1]);
+        let range10 = Range.from([5, $.param2]);
+        let range11 = Range.from([4, $.param2]);
+        expect(range8.equals(range9)).to.be.null;
+        expect(range8.equals(range10)).to.be.true;
+        expect(range8.equals(range11)).to.be.false;
     });
 
     it('correct containment for equals', () => {
@@ -89,6 +117,15 @@ describe('Range', () => {
     	expect(range1.contains(range3)).to.be.true;
     });
 
+
+    it('correct containment for equals with parameters', () => {
+        let range1 = Range.equals(37);
+        let range2 = Range.equals($.param);
+
+        expect(range1.contains(range2)).to.be.null;
+        expect(range2.contains(range1)).to.be.null;
+    });
+
     it('correct containment for lessThan', () => {
     	let range1 = Range.lessThan(37);
     	let range2 = Range.lessThan(14);
@@ -97,6 +134,16 @@ describe('Range', () => {
     	expect(range1.contains(range2)).to.be.true;
     	expect(range2.contains(range1)).to.be.false;
     	expect(range1.contains(range3)).to.be.true;
+    });
+
+    it('correct containment for lessThan with parameters', () => {
+        let range1 = Range.lessThan(37);
+        let range2 = Range.lessThan($.param);
+        let range3 = Range.lessThan($.param);
+
+        expect(range1.contains(range2)).to.be.null;
+        expect(range2.contains(range1)).to.be.null;
+        expect(range2.contains(range3)).to.be.true;
     });
 
     it('correct containment for lessThanOrEqual', () => {
@@ -109,6 +156,16 @@ describe('Range', () => {
     	expect(range1.contains(range3)).to.be.true;
     });
 
+    it('correct containment for lessThanOrEqual', () => {
+        let range1 = Range.lessThanOrEqual(37);
+        let range2 = Range.lessThanOrEqual($.param);
+        let range3 = Range.lessThanOrEqual($.param);
+
+        expect(range1.contains(range2)).to.be.null;
+        expect(range2.contains(range1)).to.be.null;
+        expect(range2.contains(range3)).to.be.true;
+    });
+
     it('correct containment for lessThanOrEqual/lessThan/equals', () => {
     	let range1 = Range.lessThanOrEqual(37);
     	let range2 = Range.equals(37);
@@ -118,6 +175,18 @@ describe('Range', () => {
     	expect(range1.contains(range2)).to.be.true;
     	expect(range3.contains(range1)).to.be.false;
     	expect(range3.contains(range2)).to.be.false;
+    });
+
+    it('correct containment for lessThanOrEqual/lessThan/equals with parameters', () => {
+        let range1 = Range.lessThanOrEqual($.param);
+        let range2 = Range.equals($.param);
+        let range3 = Range.lessThan($.param);
+
+
+        expect(range1.contains(range3)).to.be.true;
+        expect(range1.contains(range2)).to.be.true;
+        expect(range3.contains(range1)).to.be.false;
+        expect(range3.contains(range2)).to.be.false;
     });
 
     it('correct containment for greaterThan', () => {
@@ -163,6 +232,18 @@ describe('Range', () => {
     	expect(range2.contains(range4)).to.be.false;
     });
 
+    it('correct containment for greaterThan/lessThan with parameters', ()=>{
+        let range1 = Range.greaterThan($.param1);
+        let range2 = Range.greaterThan($.param2);
+        let range3 = Range.lessThan($.param1);
+        let range4 = Range.lessThan($.param2);
+
+        expect(range1.contains(range3)).to.be.false;
+        expect(range1.contains(range4)).to.be.false;
+        expect(range2.contains(range3)).to.be.false;
+        expect(range2.contains(range4)).to.be.false;
+    });
+
     it('correct containment for between', ()=>{
     	let range1 = Range.between(14,37);
     	let range2 = Range.between(15,36);
@@ -176,6 +257,13 @@ describe('Range', () => {
     	expect(range1.contains(range4)).to.be.false;
     	expect(range1.contains(range5)).to.be.false;
     	expect(range1.contains(range6)).to.be.false;
+    });
+
+    it('correct containment for between with parameters', () => {
+        let range1 = Range.between(14,$.param1);
+        let range2 = Range.between(15,$.param1);
+
+        expect(range1.contains(range2)).to.be.true;
     });
 
     it('correct containment for subquery', ()=>{
@@ -260,6 +348,13 @@ describe('Range', () => {
     	let range3 = Range.from([{">":2}, {"<=":8}])
     	expect(range3.upper_bound).to.deep.equal(Range.lessThanOrEqual(8));
     	expect(range3.lower_bound).to.deep.equal(Range.greaterThan(2));
+    });
+
+    it('Can create range with parameter', () => {
+        let range1 = Range.lessThan($.bottom);
+        expect(range1.value.$).to.equal('bottom');
+        let range2 = Range.from([,$.top]);
+        expect(range2.value.$).to.equal('top');
     });
 
 });
