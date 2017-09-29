@@ -162,13 +162,13 @@ class Range {
 				}
 
 			let comparison = comparator.lessThan(lower.value, upper.value);
-			if (comparison ===  null || comparison) {
-				return new Between(lower, upper, order);
-			}
+			if (comparison === null || comparison) { // if values not comparable, assume ordered
+				return new Between(lower, upper);
+			} 
 		} else {
 			return upper || lower;
 		}
-		return undefined;
+		return null;
 	}
 
 	/** @typedef {Range~BetweenValue|Query} Range~AnyValue
@@ -192,7 +192,7 @@ class Range {
 	static and(ranges, order=DEFAULT_ORDER) {
 		let result = Range.fromValue(ranges[0], Range.equals, order);
 		for (let i = 1; i < ranges.length; i++)
-			result = new Intersect(result, Range.fromValue(ranges[i], Range.equals, order));
+			result = new Intersection(result, Range.fromValue(ranges[i], Range.equals, order));
 		return result;
 	}
 
@@ -379,9 +379,9 @@ class OpenRange extends Range {
 		// Check to see if we have  a valid short form.
 		if (this.comparator.order === DEFAULT_ORDER) {
 			if (this.operator === GreaterThanOrEqual.OPERATOR)
-				return [this.value, undefined];
+				return [this.value, null];
 			if ( this.operator === LessThan.OPERATOR)
-				return [undefined, this.value];
+				return [null, this.value];
 		}
 		return this.toBoundsObject();
 	}
@@ -462,8 +462,9 @@ class Equals extends Range {
 	intersect(range) {
 		if (range.operator !== Equals.OPERATOR) 
 			return (range.intersect(this));
-		if (this.comparator.equals(this.value,range.value))
-			return this;
+		let is_equal = this.comparator.equals(this.value,range.value);
+		if (is_equal === null) return new Intersection(this, range);
+		if (is_equal) return this;
 		return null;
 	}
 
@@ -515,7 +516,7 @@ class LessThan extends OpenRange {
 		// If we can't determine containment, we defer
 		if (contains === null || contained === null) return new Intersection(this, range);
 
-		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) 
+		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR)
 			return Range.from([range, this], this.order);
 		if (range.operator === Between.OPERATOR) 
 			return Range.from([range.lower_bound, this], this.order);
@@ -696,7 +697,7 @@ class Subquery extends Range {
 */
 class Intersection extends Range {
 
-	static get OPERATOR () { return 'and'; }
+	static get OPERATOR () { return '$and'; }
 
 	constructor(a, b) {
 		super();
@@ -725,19 +726,18 @@ class Intersection extends Range {
 			)
 	}
 
-	get operator() { return Between.OPERATOR; }
+	get operator() { return Intersection.OPERATOR; }
 
 	equals(range) { 
 		return this.operator === range.operator 
 			&& this.a.equals(range.a) 
 			&& this.b.equals(range.b); 
-		}
+	}
 
-	toString()	{ return this.toJSON().toString(); }
+	toString()	{ return JSON.stringify(this); }
 
 	toJSON()	{
-
-		return { $and : [ a.toJSON(), b.toJSON() ] };
+		return { $and : [ this.a, this.b ] };
 	}
 }
 

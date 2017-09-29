@@ -299,8 +299,8 @@ describe('Range', () => {
         let range2 = Range.equals(14);
         let range3 = Range.equals($.param1);
 
-        expect(range1.intersect(range2)).to.not.exist;
-        expect(range2.intersect(range1)).to.not.exist;
+        expect(range1.intersect(range2)).to.deep.equal(Range.and([range1, range2]));
+        expect(range2.intersect(range1)).to.deep.equal(Range.and([range2, range1]));
         expect(range1.intersect(range3)).to.deep.equal(range1);
     });
 
@@ -314,6 +314,16 @@ describe('Range', () => {
     	expect(range1.intersect(range3).equals(range1)).to.be.true;
     });
 
+    it('correct intersection for lessThan with parameters', () => {
+        let range1 = Range.lessThan($.param);
+        let range2 = Range.lessThan(14);
+        let range3 = Range.lessThan($.param);
+
+        expect(range1.intersect(range2)).to.deep.equal(Range.and([range1, range2]));
+        expect(range2.intersect(range1)).to.deep.equal(Range.and([range2, range1]));
+        expect(range1.intersect(range3).equals(range1)).to.be.true;
+    });
+
     it('correct intersection for greaterThan', () => {
     	let range1 = Range.greaterThan(37);
     	let range2 = Range.greaterThan(14);
@@ -324,6 +334,16 @@ describe('Range', () => {
     	expect(range1.intersect(range3).equals(range1)).to.be.true;
     });
 
+    it('correct intersection for greaterThan with parameters', () => {
+        let range1 = Range.greaterThan($.param);
+        let range2 = Range.greaterThan(14);
+        let range3 = Range.greaterThan($.param);
+
+        expect(range1.intersect(range2)).to.deep.equal(Range.and([range1, range2]));
+        expect(range2.intersect(range1)).to.deep.equal(Range.and([range2, range1]));
+        expect(range1.intersect(range3).equals(range1)).to.be.true;
+    });
+
     it('correct intersection for greaterThan/LessThan', () => {
     	let range1 = Range.lessThan(37);
     	let range2 = Range.greaterThan(14);
@@ -332,8 +352,22 @@ describe('Range', () => {
 
     	expect(range1.intersect(range2).equals(Range.from([range2,range1]))).to.be.true;
     	expect(range2.intersect(range1).equals(Range.from([range2,range1]))).to.be.true;
-    	expect(range3.intersect(range4)).to.be.undefined;
-    	expect(range4.intersect(range3)).to.be.undefined;
+    	expect(range3.intersect(range4)).to.be.null;
+    	expect(range4.intersect(range3)).to.be.null;
+    });
+
+    it('correct intersection for greaterThan/LessThan with parameters', () => {
+        let range1 = Range.lessThan($.param1);
+        let range2 = Range.greaterThan($.param2);
+        let range3 = Range.lessThan($.param2);
+        let range4 = Range.greaterThan($.param1);
+
+        expect(range1.intersect(range2)).to.deep.equal(Range.between(range2,range1));
+        expect(range2.intersect(range1)).to.deep.equal(Range.between(range2,range1));
+        expect(range1.intersect(range4)).to.be.null;
+        expect(range2.intersect(range3)).to.be.null;
+        expect(range1.intersect(range3)).to.deep.equal(Range.and([range1,range3]));
+        expect(range2.intersect(range4)).to.deep.equal(Range.and([range2,range4]));
     });
 
 
@@ -349,8 +383,8 @@ describe('Range', () => {
     	expect(range1.intersect(range2)).to.deep.equal(range2);
     	expect(range1.intersect(range3)).to.deep.equal(Range.from([14,15]));
     	expect(range1.intersect(range4)).to.deep.equal(Range.from([36,37]));
-    	expect(range1.intersect(range5)).to.be.undefined;
-    	expect(range1.intersect(range5)).to.be.undefined;
+    	expect(range1.intersect(range5)).to.be.null;
+    	expect(range1.intersect(range5)).to.be.null;
     });
 
     it('correct intersection for subquery', () => {
@@ -376,6 +410,15 @@ describe('Range', () => {
         expect(range1.value.$).to.equal('bottom');
         let range2 = Range.from([,$.top]);
         expect(range2.value.$).to.equal('top');
+    });
+
+    it('Can create range with and', () => {
+        let range1 = Range.greaterThan($.bottom);
+        let range2 = Range.lessThan($.top);
+        let range3 = Range.and([range1, range2]);
+        expect(range3.operator).to.equal('$and');
+        expect(range3.a).to.equal(range1);
+        expect(range3.b).to.equal(range2);
     });
 
 });
