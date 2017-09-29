@@ -226,7 +226,7 @@ class Query {
 	*/
 	toExpression(formatter=Query.DEFAULT_FORMAT, context) {
 		if (this.union.length === 1) {
-			return formatter.andExpr(...Stream.fromProperties(this.union[0]).map(([dimension,range])=>range.toExpression(dimension,formatter,context)).toArray());
+			return this.union[0].toExpression(formatter,context);
 		}
 		if (this.union.length > 1) {
 			let factor = this.findFactor();
@@ -254,11 +254,7 @@ class Query {
 			} else {
 				return formatter.orExpr(
 					...this.union.map(
-						cube => formatter.andExpr(
-							...Stream.fromProperties(cube).map(
-								([dimension,range])=>range.toExpression(dimension, formatter, context)
-							).toArray()
-						)
+						cube => cube.toExpression(formatter, context)
 					)
 				);
 			}

@@ -262,8 +262,10 @@ describe('Range', () => {
     it('correct containment for between with parameters', () => {
         let range1 = Range.between(14,$.param1);
         let range2 = Range.between(15,$.param1);
-
+        let range3 = Range.between($.param1,15);
+        let range4 = Range.between($.param1,14);
         expect(range1.contains(range2)).to.be.true;
+        expect(range3.contains(range4)).to.be.true;
     });
 
     it('correct containment for subquery', ()=>{
@@ -271,6 +273,15 @@ describe('Range', () => {
     	let range2 = Range.from({count: [1,]});
     	expect(range1.contains(range2)).to.be.false;
     	expect(range2.contains(range1)).to.be.true;
+    });
+
+    it('correct containment for subquery with parameters', ()=>{
+        let range1 = Range.from({count: [$.param1,]});
+        let range2 = Range.from({count: [$.param2,]});
+        let range3 = Range.from({count: $.param1});
+        expect(range1.contains(range2)).to.be.false;
+        expect(range2.contains(range1)).to.be.false;
+        expect(range1.contains(range3)).to.be.true;
     });
 
     it('correct intersection for equals', () => {
@@ -281,6 +292,16 @@ describe('Range', () => {
     	expect(range1.intersect(range2)).to.not.exist;
     	expect(range2.intersect(range1)).to.not.exist;
     	expect(range1.intersect(range3)).to.deep.equal(range1);
+    });
+
+    it('correct intersection for equals with parameters', () => {
+        let range1 = Range.equals($.param1);
+        let range2 = Range.equals(14);
+        let range3 = Range.equals($.param1);
+
+        expect(range1.intersect(range2)).to.not.exist;
+        expect(range2.intersect(range1)).to.not.exist;
+        expect(range1.intersect(range3)).to.deep.equal(range1);
     });
 
     it('correct intersection for lessThan', () => {

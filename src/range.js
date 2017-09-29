@@ -83,6 +83,7 @@ class Range {
 	* | ">="			| Range.greaterThanOrEqual 	|
 	* | "<="			| Range.lessThanOrEqual 	|
 	* | "="				| Range.equal 				|
+	* | "$and"			| Range.and 				|
 	*/
 	static get OPERATORS() {
 		return RANGE_OPERATORS;
@@ -170,6 +171,31 @@ class Range {
 		return undefined;
 	}
 
+	/** @typedef {Range~BetweenValue|Query} Range~AnyValue
+	* Anything that can be converted into a range.
+	*/
+
+
+	/** Create a range containing values in all the given ranges
+	*
+	* Note: normally Range.intersection should be used to compose ranges. Range.intersection does the math to see if
+	* and intersection actually exists and to simplify (so for example, the intersection of x<5 and x<7 is simply x <5).
+	* This function exists to cover the case where a range with Param values has been converted into JSON and must
+	* be converted back - there should be no reason to call it explicitly.
+	*
+	* TODO: consider if this needs to support Between parameters.
+	*
+	* @param {Range~AnyValue[]} ranges
+	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
+	* @returns {Range} a Range object
+	*/
+	static and(ranges, order=DEFAULT_ORDER) {
+		let result = Range.fromValue(ranges[0], Range.equals, order);
+		for (let i = 1; i < ranges.length; i++)
+			result = new Intersect(result, Range.fromValue(ranges[i], Range.equals, order));
+		return result;
+	}
+
 	/** Create a range with a subquery
 	*
 	* Objects we are querying may be complex. Where an object property contains an object or an array, we may
@@ -241,7 +267,7 @@ class Range {
 	* | Object 			 | provided | default_constructor(obj, order)
 	* | Object 			 | default 	| Range.subquery(Query.from(obj)) 
 	*
-	* @param {Range~BetweenValue|Query} obj - value
+	* @param {Range~AnyValue} obj - value
 	@ @param {Function} [default_constructor=Range.equals] - constructor to use if Param or Comparable is provided
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a range
@@ -277,10 +303,9 @@ class Range {
 	* | Type 				 | Result
 	* |----------------------|-----------
 	* | Range~BetweenValue[] | [a,b] -> Range.between(Range.fromBounds(a,Range.greaterThanOrEqual, order), Range.fromBounds(b,Range.lessThan, order))
-	* | Range~BetweenValue 	 | Range.fromValue(object)
-	* | Query 	 			 | Range.fromValue(object)
+	* | Range~AnyValue 	 	 | Range.fromValue(object)
 	*
-	* @param {Range~BetweenValue|Range~BetweenValue[]|Query} bounds bounding values for range
+	* @param {Range~AnyValue|Range~BetweenValue[]} bounds bounding values for range
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a range, or undefined if paramters are not compatible.
 	*/
@@ -312,11 +337,12 @@ class Range {
 * @private
 */
 var RANGE_OPERATORS = {
-	">"  : Range.greaterThan,
-	"<"  : Range.lessThan,
-	">=" : Range.greaterThanOrEqual,
-	"<=" : Range.lessThanOrEqual,
-	"="	 : Range.equals
+	">"  	: Range.greaterThan,
+	"<"  	: Range.lessThan,
+	">=" 	: Range.greaterThanOrEqual,
+	"<=" 	: Range.lessThanOrEqual,
+	"="	 	: Range.equals,
+	"$and" 	: Range.and
 }
 
 
@@ -438,7 +464,7 @@ class Equals extends Range {
 			return (range.intersect(this));
 		if (this.comparator.equals(this.value,range.value))
 			return this;
-		return undefined;
+		return null;
 	}
 
 	toExpression(dimension, formatter, context)	{ 
@@ -478,16 +504,26 @@ class LessThan extends OpenRange {
 	}
 
 	intersect(range) {
-		if (this.contains(range)) 
+
+		let contains = this.contains(range);
+		if (contains) 
 			return range;
-		if (range.contains(this)) 
+		let contained = range.contains(this)
+		if (contained) 
 			return this;
+
+		// If we can't determine containment, we defer
+		if (contains === null || contained === null) return new Intersection(this, range);
+
 		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) 
 			return Range.from([range, this], this.order);
 		if (range.operator === Between.OPERATOR) 
 			return Range.from([range.lower_bound, this], this.order);
+		if (range.operator === Intersection.OPERATOR)
+			return range.intersect(this);
 
-		return undefined;
+
+		return null;
 	}
 }
 
@@ -509,16 +545,24 @@ class LessThanOrEqual extends OpenRange {
 	}
 
 	intersect(range) {
-		if (this.contains(range)) 
+		let contains = this.contains(range);
+		if (contains) 
 			return range;
-		if (range.contains(this)) 
+		let contained = range.contains(this)
+		if (contained) 
 			return this;
+
+		// If we can't determine containment, we defer
+		if (contains === null || contained === null) return new Intersection(this, range);
+
 		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) 
 			return Range.from([range, this], this.order);
 		if (range.operator === Between.OPERATOR) 
 			return Range.from([range.lower_bound, this], this.order);
+		if (range.operator === Intersection.OPERATOR)
+			return range.intersect(this);
 
-		return undefined;
+		return null;
 	}
 
 }
@@ -544,16 +588,24 @@ class GreaterThan extends OpenRange {
 	}
 
 	intersect(range) {
-		if (this.contains(range)) 
+		let contains = this.contains(range);
+		if (contains) 
 			return range;
-		if (range.contains(this)) 
+		let contained = range.contains(this)
+		if (contained) 
 			return this;
+
+		// If we can't determine containment, we defer
+		if (contains === null || contained === null) return new Intersection(this, range);
+
 		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) 
 			return Range.from([this, range], this.order);
 		if (range.operator === Between.OPERATOR) 
 			return Range.from([this, range,upper_bound], this.order);
+		if (range.operator === Intersection.OPERATOR)
+			return range.intersect(this);
 
-		return undefined;
+		return null;
 	}
 }
 
@@ -576,16 +628,24 @@ class GreaterThanOrEqual extends OpenRange {
 	}
 
 	intersect(range) {
-		if (this.contains(range)) 
+		let contains = this.contains(range);
+		if (contains) 
 			return range;
-		if (range.contains(this)) 
+		let contained = range.contains(this)
+		if (contained) 
 			return this;
+
+		// If we can't determine containment, we defer
+		if (contains === null || contained === null) return new Intersection(this, range);
+
 		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) 
 			return Range.from([this, range], this.order);
 		if (range.operator === Between.OPERATOR) 
 			return Range.from([this, range.upper_bound], this.order);
+		if (range.operator === Intersection.OPERATOR)
+			return range.intersect(this);
 
-		return undefined;
+		return null;
 	}
 }
 
@@ -606,7 +666,7 @@ class Subquery extends Range {
 
 	intersect(range) {
 		if (range.operator === Subquery.OPERATOR) return new Subquery(this.query.and(range.query));
-		return undefined;
+		return null;
 	}
 
 	toExpression(dimension, formatter, context) { 
@@ -628,6 +688,57 @@ class Subquery extends Range {
 	toJSON() {
 		return this.query;
 	}	
+}
+
+/** Support a deferred intersection between parametrized ranges.
+*
+* @private 
+*/
+class Intersection extends Range {
+
+	static get OPERATOR () { return 'and'; }
+
+	constructor(a, b) {
+		super();
+		this.a = a;
+		this.b = b;
+	}
+
+	contains(range) {
+		return this.a.contains(range) || this.b.contains(range);
+	}
+
+	intersect(range) {
+		// We assume an intersection was created because a or b has parameters. However, one or other may not
+		// have parameters; therefore the possibility exists that either a.intersect(range) or b.intersect(range)
+		// may become null (as there is no intersection). If so, the intersection returns null.
+		let a = this.a.intersect(range);
+		let b = this.b.intersect(range);
+		if (a && b) return new Intersection(this.a.intersect(range), this.b.intersect(range));
+		return null;
+	}
+
+	toExpression(dimension, formatter, context)	{ 
+		return formatter.andExpr(
+				this.a.toExpression(dimension, formatter, context),
+				this.b.toExpression(dimension, formatter, context)
+			)
+	}
+
+	get operator() { return Between.OPERATOR; }
+
+	equals(range) { 
+		return this.operator === range.operator 
+			&& this.a.equals(range.a) 
+			&& this.b.equals(range.b); 
+		}
+
+	toString()	{ return this.toJSON().toString(); }
+
+	toJSON()	{
+
+		return { $and : [ a.toJSON(), b.toJSON() ] };
+	}
 }
 
 module.exports = Range;

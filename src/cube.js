@@ -63,6 +63,16 @@ class Cube {
 	toString() {
 		return '{ ' + Stream.fromProperties(this).map(([k,v])=>`${k}:${v}`).join(', ') + ' }';
 	}
+
+	toExpression(formatter, context) {
+		return formatter.andExpr(
+			...Stream.fromProperties(this).map(
+				([dimension,range])=>range.toExpression(dimension, formatter, context)
+			).toArray()
+		);
+	}
 }
 
 module.exports = Cube;
+
+
