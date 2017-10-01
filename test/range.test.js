@@ -28,9 +28,9 @@ describe('Range', () => {
 
     it('can create between', () => {
     	let range1 = Range.between(14, 37);
+        expect(range1.operator).to.equal('between');
     	expect(range1.upper_bound.equals(Range.lessThan(37))).to.be.true;
     	expect(range1.lower_bound.equals(Range.greaterThanOrEqual(14))).to.be.true;
-    	expect(range1.operator).to.equal('between');
     });
 
     it('can create subquery', () => {
@@ -371,21 +371,7 @@ describe('Range', () => {
     });
 
 
-    it('correct intersection for between', () => {
 
-    	let range1 = Range.between(14,37);
-    	let range2 = Range.between(15,36);
-    	let range3 = Range.between(13,15);
-    	let range4 = Range.between(36,38);
-    	let range5 = Range.between(12,13);
-    	let range6 = Range.between(38,39);
-
-    	expect(range1.intersect(range2)).to.deep.equal(range2);
-    	expect(range1.intersect(range3)).to.deep.equal(Range.from([14,15]));
-    	expect(range1.intersect(range4)).to.deep.equal(Range.from([36,37]));
-    	expect(range1.intersect(range5)).to.be.null;
-    	expect(range1.intersect(range5)).to.be.null;
-    });
 
     it('correct intersection for subquery', () => {
     	let range1 = Range.from({value: [3,10]});
@@ -419,6 +405,59 @@ describe('Range', () => {
         expect(range3.operator).to.equal('$and');
         expect(range3.a).to.equal(range1);
         expect(range3.b).to.equal(range2);
+    });
+
+    it('correct intersection for between', () => {
+
+        let range1 = Range.between(14,37);
+        let range2 = Range.between(15,36);
+        let range3 = range1.intersect(range2);
+
+        expect(range3.lower_bound).to.deep.equal(Range.from([15,]));
+        expect(range3.upper_bound).to.deep.equal(Range.from([,36]));
+
+        let range4 = Range.between(14,17);
+        let range5 = Range.between(29,36);
+        let range6 = range4.intersect(range5);
+
+        expect(range6).to.be.null;
+
+        let range7 = Range.between(14,17);
+        let range8 = Range.between(17,36);
+        let range9 = range7.intersect(range8);
+
+        expect(range9).to.be.null;
+
+    });
+
+    it('correct intersection for between with parameters', () => {
+
+        let range1 = Range.between(14,37);
+        let range2 = Range.between($.param1,36);
+        let range3 = range1.intersect(range2);
+
+        expect(range3.lower_bound).to.deep.equal(Range.and([Range.from([14,]),Range.from([$.param1,])]));
+        expect(range3.upper_bound).to.deep.equal(Range.from([,36]));
+
+        let range4 = Range.between(14,$.param1);
+        let range5 = Range.between(15,36);
+        let range6 = range4.intersect(range5);
+
+        expect(range6.lower_bound).to.deep.equal(Range.from([15,]));
+        expect(range6.upper_bound).to.deep.equal(Range.and([Range.from([,$.param1]),Range.from([,36])]));
+
+        let range7 = Range.between(14,$.param1);
+        let range8 = Range.between(15,$.param1);
+        let range9 = range7.intersect(range8);
+
+        expect(range9.lower_bound).to.deep.equal(Range.from([15,]));
+        expect(range9.upper_bound).to.deep.equal(Range.from([,$.param1]));
+
+        let range10 = Range.between(14,$.param1);
+        let range11 = Range.between($.param1,36);
+        let range12 = range10.intersect(range11);
+
+        expect(range12).to.be.null;
     });
 
 });

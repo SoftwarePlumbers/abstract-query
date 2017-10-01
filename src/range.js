@@ -149,26 +149,14 @@ class Range {
 	*/
 	static between(lower, upper, order = DEFAULT_ORDER)	{ 
 
-		let comparator = new Comparator(order);
-
 		lower = Range.fromValue(lower, Range.greaterThanOrEqual, order);
 		upper = Range.fromValue(upper, Range.lessThan, order);
 
 		if (lower && upper) {
-			if (comparator.equals(lower.value, upper.value) 
-				&& lower.operator === GreaterThanOrEqual.OPERATOR
-				&& upper.operator === LessThanOrEqual.OPERATOR) {
-					return new Equals(lower.value);
-				}
-
-			let comparison = comparator.lessThan(lower.value, upper.value);
-			if (comparison === null || comparison) { // if values not comparable, assume ordered
-				return new Between(lower, upper);
-			} 
+			return new Between(lower,upper);
 		} else {
 			return upper || lower;
 		}
-		return null;
 	}
 
 	/** @typedef {Range~BetweenValue|Query} Range~AnyValue
@@ -388,7 +376,12 @@ class OpenRange extends Range {
 
 }
 
-
+/** Range between two bounds.
+*
+* A range cannot be parametrized; it is the result of an 'and' operation on a lessThan and greaterThan 
+* range if the two ranges themselves are not parametrised. If these ranges are parametrised, the result 
+* is an intersection.
+*/
 class Between extends Range {
 
 	static get OPERATOR () { return 'between'; }
@@ -399,14 +392,25 @@ class Between extends Range {
 		this.upper_bound = upper_bound;
 	}
 
+	get comparator() { return this.lower_bound.comparator || this.upper_bound.comparator; }
+
 	contains(range) {
 		return this.lower_bound.contains(range) && this.upper_bound.contains(range);
 	}
 
 	intersect(range) {
-		let result = this.lower_bound.intersect(range);
-		if (result) result = this.upper_bound.intersect(result);
-		return result;
+		if (range.operator === Between.OPERATOR) {
+			let lower_bound = this.lower_bound.intersect(range.lower_bound);
+			let upper_bound = this.upper_bound.intersect(range.upper_bound);
+			return lower_bound.intersect(upper_bound);
+		}
+
+		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR)
+			return this.upper_bound.intersect(range).intersect(this.lower_bound);
+		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR)
+			return this.lower_bound.intersect(range).intersect(this.upper_bound);
+
+		return null;
 	}
 
 	toExpression(dimension, formatter, context)	{ 
@@ -462,6 +466,7 @@ class Equals extends Range {
 	intersect(range) {
 		if (range.operator !== Equals.OPERATOR) 
 			return (range.intersect(this));
+
 		let is_equal = this.comparator.equals(this.value,range.value);
 		if (is_equal === null) return new Intersection(this, range);
 		if (is_equal) return this;
@@ -500,33 +505,66 @@ class LessThan extends OpenRange {
 			return this.comparator.lessThanOrEqual(range.value, this.value);
 		if (range.operator === Between.OPERATOR) 
 			return this.contains(range.upper_bound);
+		if (range.operator === Intersection.OPERATOR) 
+			return this.contains(range.upper_bound);
 
-		return false;
+		return false; 
 	}
 
 	intersect(range) {
 
-		let contains = this.contains(range);
-		if (contains) 
-			return range;
-		let contained = range.contains(this)
-		if (contained) 
-			return this;
-
-		// If we can't determine containment, we defer
-		if (contains === null || contained === null) return new Intersection(this, range);
-
-		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR)
-			return Range.from([range, this], this.order);
-		if (range.operator === Between.OPERATOR) 
-			return Range.from([range.lower_bound, this], this.order);
-		if (range.operator === Intersection.OPERATOR)
+		// Complex ranges are directly handled by their own class.
+		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
 			return range.intersect(this);
 
+		// a < x && a < y  -> a < x if x <= y, a < y otherwise
+		// a < x && a <= y -> a < x if x <= y, a <= y otherwise 
+		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) {
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return this;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.lessThanOrEqual(this.value, range.value)) return this;
+				return range;
+			}
+		}
 
-		return null;
+		// a < x && a > y -> y<a<x if y < x, null otherwise	
+		// a < x && a >= y -> y<=a<x if y < x, null otherwise	
+		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) {
+
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return null;
+				return new Between(range,this);
+			} else {
+				
+				if (this.comparator.lessThan(range.value, this.value)) {
+					return new Between(range, this);
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		// a < x && a = y -> a = y if y < x; null otherwise
+		if (range.operator === Equals.OPERATOR) {
+				if (Param.isParam(this.value) || Param.isParam(range.value)) {
+					if (Param.isParam(this.value) && this.value.equals(range.value)) return null;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.lessThan(range.value, this.value)) {
+					return range;
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		throw new RangeError("Uknown operator: ", range.operator);
 	}
 }
+
 
 class LessThanOrEqual extends OpenRange {
 
@@ -546,24 +584,73 @@ class LessThanOrEqual extends OpenRange {
 	}
 
 	intersect(range) {
-		let contains = this.contains(range);
-		if (contains) 
-			return range;
-		let contained = range.contains(this)
-		if (contained) 
-			return this;
 
-		// If we can't determine containment, we defer
-		if (contains === null || contained === null) return new Intersection(this, range);
-
-		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) 
-			return Range.from([range, this], this.order);
-		if (range.operator === Between.OPERATOR) 
-			return Range.from([range.lower_bound, this], this.order);
-		if (range.operator === Intersection.OPERATOR)
+		// Complex ranges always handled by their own class
+		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
 			return range.intersect(this);
 
-		return null;
+		// a <= x && a < y  -> a <= x if x < y, a < y otherwise
+		// a <= x && a <= y -> a <= x if x < y, a <= y otherwise 
+		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) {
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return range;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.lessThanOrEqual(this.value,range.value)) return this;
+				return range;
+			}
+		}
+
+		// a <= x && a > y -> y<a<=x if y < x, null otherwise	
+		if (range.operator === GreaterThan.OPERATOR) {
+
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return null;
+				return new Between(range,this);
+			} else {
+				
+				if (this.comparator.lessThan(range.value, this.value)) {
+					return new Between(range, this);
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		// a <= x && a >= y -> y<=a<=x if y < x, a = x if y = x, null otherwise	
+		if (range.operator === GreaterThanOrEqual.OPERATOR) {
+
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return new Equals(this.value);
+				return new Intersection(this,range);
+			} else {
+				
+				if (this.comparator.lessThan(range.value, this.value)) {
+					return new Between(range, this);
+				} 
+				if (this.comparator.equals(range.value, this.value)) {
+					return new Equals(range.value);
+				} 
+				return null;
+			} 
+		}
+
+		// a <= x && a = y -> a = y if y <= x; null otherwise
+		if (range.operator === Equals.OPERATOR) {
+				if (Param.isParam(this.value) || Param.isParam(range.value)) {
+					if (Param.isParam(this.value) && this.value.equals(range.value)) return range;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.lessThanOrEqual(range.value, this.value)) {
+					return range;
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		throw new RangeError("Uknown operator: ", range.operator);
 	}
 
 }
@@ -589,24 +676,56 @@ class GreaterThan extends OpenRange {
 	}
 
 	intersect(range) {
-		let contains = this.contains(range);
-		if (contains) 
-			return range;
-		let contained = range.contains(this)
-		if (contained) 
-			return this;
 
-		// If we can't determine containment, we defer
-		if (contains === null || contained === null) return new Intersection(this, range);
-
-		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) 
-			return Range.from([this, range], this.order);
-		if (range.operator === Between.OPERATOR) 
-			return Range.from([this, range,upper_bound], this.order);
-		if (range.operator === Intersection.OPERATOR)
+		// Complex ranges are directly handled by their own class.
+		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
 			return range.intersect(this);
 
-		return null;
+		// a > x && a > y  -> a > x if x >= y, a > y otherwise
+		// a > x && a >= y -> a < x if x >= y, a >= y otherwise 
+		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) {
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return this;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.greaterThanOrEqual(this.value, range.value)) return this;
+				return range;
+			}
+		}
+
+
+		// a > x && a < y -> x<a<y if x < y, null otherwise	
+		// a > x && a <= y -> x<a<=y if x < y, null otherwise	
+		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) {
+
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return null;
+				return new Between(this,range);
+			} else {
+				
+				if (this.comparator.lessThan(this.value, range.value)) {
+					return new Between(this, range);
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		// a > x && a = y -> a = y if y > x; null otherwise
+		if (range.operator === Equals.OPERATOR) {
+				if (Param.isParam(this.value) || Param.isParam(range.value)) {
+					if (Param.isParam(this.value) && this.value.equals(range.value)) return null;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.greaterThan(range.value, this.value)) {
+					return range;
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		throw new RangeError("Uknown operator: ", range.operator);
 	}
 }
 
@@ -620,6 +739,7 @@ class GreaterThanOrEqual extends OpenRange {
 
 
 	contains(range) {
+
 		if (range.operator === Equals.OPERATOR || range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) 
 			return this.comparator.greaterThanOrEqual(range.value, this.value);
 		if (range.operator === Between.OPERATOR) 
@@ -629,24 +749,73 @@ class GreaterThanOrEqual extends OpenRange {
 	}
 
 	intersect(range) {
-		let contains = this.contains(range);
-		if (contains) 
-			return range;
-		let contained = range.contains(this)
-		if (contained) 
-			return this;
 
-		// If we can't determine containment, we defer
-		if (contains === null || contained === null) return new Intersection(this, range);
-
-		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) 
-			return Range.from([this, range], this.order);
-		if (range.operator === Between.OPERATOR) 
-			return Range.from([this, range.upper_bound], this.order);
-		if (range.operator === Intersection.OPERATOR)
+		// Complex ranges always handled by their own class
+		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
 			return range.intersect(this);
 
-		return null;
+		// a >= x && a > y  -> a >= x if x > y, a > y otherwise
+		// a >= x && a >= y -> a >= x if x > y, a >= y otherwise 
+		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR) {
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return range;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.greaterThanOrEqual(this.value,range.value)) return this;
+				return range;
+			}
+		}
+
+		// a >= x && a < y -> x<=a<y if y > x, null otherwise	
+		if (range.operator === LessThan.OPERATOR) {
+
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return null;
+				return new Between(this,range);
+			} else {
+				
+				if (this.comparator.greaterThan(range.value, this.value)) {
+					return new Between(this,range);
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		// a >= x && a <= y -> x<=a<=y if y > x, a = x if y = x, null otherwise	
+		if (range.operator === LessThanOrEqual.OPERATOR) {
+
+			if (Param.isParam(this.value) || Param.isParam(range.value)) {
+
+				if (Param.isParam(this.value) && this.value.equals(range.value)) return new Equals(this.value);
+				return new Intersection(this,range);
+			} else {
+				
+				if (this.comparator.greaterThan(range.value, this.value)) {
+					return new Between(range, this);
+				} 
+				if (this.comparator.equals(range.value, this.value)) {
+					return new Equals(range.value);
+				} 
+				return null;
+			} 
+		}
+
+		// a >= x && a = y -> a = y if y >= x; null otherwise
+		if (range.operator === Equals.OPERATOR) {
+				if (Param.isParam(this.value) || Param.isParam(range.value)) {
+					if (Param.isParam(this.value) && this.value.equals(range.value)) return range;
+				return new Intersection(this,range);
+			} else {
+				if (this.comparator.greaterThanOrEqual(range.value, this.value)) {
+					return range;
+				} else {
+					return null;
+				}
+			} 
+		}
+
+		throw new RangeError("Uknown operator: " + range.operator);
 	}
 }
 
@@ -705,18 +874,38 @@ class Intersection extends Range {
 		this.b = b;
 	}
 
+	get comparator() { return this.a.comparator || this.b.comparator; }
+
+	get upper_bound() {
+		if (this.a.upper_bound && this.b.upper_bound) return this.a.upper_bound.intersect(this.b.upper_bound);
+		if (this.a.upper_bound) return this.a.upper_bound;
+		if (this.b.upper_bound) return this.b.upper_bound;
+		return null;
+	}
+
+	get lower_bound() {
+		if (this.a.lower_bound && this.b.lower_bound) return this.a.lower_bound.intersect(this.b.lower_bound);
+		if (this.a.lower_bound) return this.a.lower_bound;
+		if (this.a.lower_bound) return this.a.lower_bound;
+		return null;
+	}
+
 	contains(range) {
-		return this.a.contains(range) || this.b.contains(range);
+		return this.a.contains(range) && this.b.contains(range);
 	}
 
 	intersect(range) {
-		// We assume an intersection was created because a or b has parameters. However, one or other may not
-		// have parameters; therefore the possibility exists that either a.intersect(range) or b.intersect(range)
-		// may become null (as there is no intersection). If so, the intersection returns null.
-		let a = this.a.intersect(range);
-		let b = this.b.intersect(range);
-		if (a && b) return new Intersection(this.a.intersect(range), this.b.intersect(range));
-		return null;
+		let a,b;
+
+		if (range.operator === Intersection.OPERATOR) {
+			a = this.intersect(range.a);
+			b = this.intersect(range.b);
+		} else {
+			a = range.intersect(this.a);
+			b = range.intersect(this.b);
+		}
+
+		return (a && b) ? new Intersection(a, b) : null;
 	}
 
 	toExpression(dimension, formatter, context)	{ 
