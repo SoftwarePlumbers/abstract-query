@@ -1,4 +1,5 @@
 const { Param } = require('./param');
+const Stream = require('iterator-plumbing');
 
 /** Default comparator.
 * @param a first parameter
@@ -59,6 +60,14 @@ class Comparator {
 	/** @returns {boolean} true if a >= b or a and b are both the same parameter, null if either is a parameter and they are not equal, false otherwise */
 	lessThanOrEqual(a,b) 	{ return Comparator.paramsEqual(a,b) || (Comparator.params(a,b) ? null : !this.order(b,a)); }
 }
+
+class BoundsType {
+	static get UPPER() { return BoundsType._upper; }
+	static get LOWER() { return BoundsType._lower; }
+}
+
+BoundsType._upper = new BoundsType();
+BoundsType._lower = new BoundsType();
 
 /** Range is an abstract class representing a range of values.
 *
@@ -159,17 +168,16 @@ class Range {
 		}
 	}
 
+	static get UNBOUNDED() {
+		return new Unbounded();
+	}
+
 	/** @typedef {Range~BetweenValue|Query} Range~AnyValue
 	* Anything that can be converted into a range.
 	*/
 
 
 	/** Create a range containing values in all the given ranges
-	*
-	* Note: normally Range.intersection should be used to compose ranges. Range.intersection does the math to see if
-	* and intersection actually exists and to simplify (so for example, the intersection of x<5 and x<7 is simply x <5).
-	* This function exists to cover the case where a range with Param values has been converted into JSON and must
-	* be converted back - there should be no reason to call it explicitly.
 	*
 	* TODO: consider if this needs to support Between parameters.
 	*
@@ -178,10 +186,14 @@ class Range {
 	* @returns {Range} a Range object
 	*/
 	static and(ranges, order=DEFAULT_ORDER) {
-		let result = Range.fromValue(ranges[0], Range.equals, order);
-		for (let i = 1; i < ranges.length; i++)
-			result = new Intersection(result, Range.fromValue(ranges[i], Range.equals, order));
-		return result;
+
+		let intersection = Range.UNBOUNDED;
+
+		for (let i=0; i < ranges.length && intersection != null; i++) {
+			intersection = intersection.intersect(Range.fromValue(ranges[i], order));
+		}
+
+		return intersection;
 	}
 
 	/** Create a range with a subquery
@@ -333,6 +345,41 @@ var RANGE_OPERATORS = {
 	"$and" 	: Range.and
 }
 
+class Unbounded extends Range {
+
+	static get OPERATOR () { return '*'; }
+
+	constructor() {
+		super();
+	}
+
+	get operator() { return Unbounded.OPERATOR; }
+
+	contains(range) {
+		return true;
+	}
+
+	intersect(range) {
+		return range;
+	}
+
+	toExpression(dimension, formatter, context)	{ 
+		return formatter.operExpr(dimension, '=', '*', context); 
+	}
+
+	equals(range)						{ return this.operator === range.operator; }
+
+	toString()							{ return this.toJSON().toString(); }
+
+	toBoundsObject() {
+		return { [this.operator] : this.operator }
+	}
+
+	toJSON() {
+		return this.value;
+	}
+}
+
 
 class OpenRange extends Range {
 
@@ -399,12 +446,18 @@ class Between extends Range {
 	}
 
 	intersect(range) {
+		if (range.operator === Unbounded.OPERATOR) return this;
 		if (range.operator === Between.OPERATOR) {
 			let lower_bound = this.lower_bound.intersect(range.lower_bound);
 			let upper_bound = this.upper_bound.intersect(range.upper_bound);
+			// intersection beween two valid lower bounds or two valid upper bounds should always exist
 			return lower_bound.intersect(upper_bound);
 		}
-
+		if (range.operator === Intersection.OPERATOR) {
+			let result = range.intersect(this.lower_bound);
+			if (result) result = result.intersect(this.upper_bound);
+			return result;
+		}
 		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR)
 			return this.upper_bound.intersect(range).intersect(this.lower_bound);
 		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR)
@@ -464,6 +517,7 @@ class Equals extends Range {
 	}
 
 	intersect(range) {
+		if (range.operator === Unbounded.OPERATOR) return this;
 		if (range.operator !== Equals.OPERATOR) 
 			return (range.intersect(this));
 
@@ -505,6 +559,7 @@ class LessThan extends OpenRange {
 			return this.comparator.lessThanOrEqual(range.value, this.value);
 		if (range.operator === Between.OPERATOR) 
 			return this.contains(range.upper_bound);
+		// TODO: not working yet
 		if (range.operator === Intersection.OPERATOR) 
 			return this.contains(range.upper_bound);
 
@@ -512,6 +567,7 @@ class LessThan extends OpenRange {
 	}
 
 	intersect(range) {
+		if (range.operator === Unbounded.OPERATOR) return this;
 
 		// Complex ranges are directly handled by their own class.
 		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
@@ -521,7 +577,8 @@ class LessThan extends OpenRange {
 		// a < x && a <= y -> a < x if x <= y, a <= y otherwise 
 		if (range.operator === LessThan.OPERATOR || range.operator === LessThanOrEqual.OPERATOR) {
 			if (Param.isParam(this.value) || Param.isParam(range.value)) {
-				if (Param.isParam(this.value) && this.value.equals(range.value)) return this;
+				// tricky - a < z && a <= z -> a < z
+				if (Param.isParam(this.value) && this.comparator.equals(this.value, range.value)) return this;
 				return new Intersection(this,range);
 			} else {
 				if (this.comparator.lessThanOrEqual(this.value, range.value)) return this;
@@ -584,6 +641,7 @@ class LessThanOrEqual extends OpenRange {
 	}
 
 	intersect(range) {
+		if (range.operator === Unbounded.OPERATOR) return this;
 
 		// Complex ranges always handled by their own class
 		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
@@ -676,6 +734,7 @@ class GreaterThan extends OpenRange {
 	}
 
 	intersect(range) {
+		if (range.operator === Unbounded.OPERATOR) return this;
 
 		// Complex ranges are directly handled by their own class.
 		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
@@ -750,6 +809,7 @@ class GreaterThanOrEqual extends OpenRange {
 
 	intersect(range) {
 
+		if (range.operator === Unbounded.OPERATOR) return this;
 		// Complex ranges always handled by their own class
 		if (range.operator === Between.OPERATOR || range.operator === Intersection.OPERATOR)
 			return range.intersect(this);
@@ -835,6 +895,7 @@ class Subquery extends Range {
 	}
 
 	intersect(range) {
+		if (range.operator === Unbounded.OPERATOR) return this;
 		if (range.operator === Subquery.OPERATOR) return new Subquery(this.query.and(range.query));
 		return null;
 	}
@@ -868,65 +929,122 @@ class Intersection extends Range {
 
 	static get OPERATOR () { return '$and'; }
 
-	constructor(a, b) {
+
+	/** construct an intersection
+	*
+	* Note: will throw an error if result is logically empty. We should only call this method with
+	* ranges that are known to not to be exclusive, and should only call it with simple unary ranges. 
+	* Use repeated calls of .intersect to build an intersection without these limitations.
+	*/
+	constructor(...ranges) {
 		super();
-		this.a = a;
-		this.b = b;
+		this.known_bounds = Range.UNBOUNDED;
+		this.parametrized_bounds = {};
+		this.parameters = [];
+		for (let range of ranges) {
+			if (!this.addRange(range)) throw new RangeError(`${range} excludes previously added ranges`);
+		}
 	}
 
-	get comparator() { return this.a.comparator || this.b.comparator; }
+	/** Add a range to this intersection.
+	*
+	* @returns false if then resulting range would be logically empty.
+	*/
+	addRange(range) {
 
-	get upper_bound() {
-		if (this.a.upper_bound && this.b.upper_bound) return this.a.upper_bound.intersect(this.b.upper_bound);
-		if (this.a.upper_bound) return this.a.upper_bound;
-		if (this.b.upper_bound) return this.b.upper_bound;
-		return null;
+		if (range.operator === Unbounded.OPERATOR) {
+			return true;
+		}
+
+		if (range.operator === Between.OPERATOR) {
+			return this.addRange(range.lower_bound) && this.addRange(range.upper_bound);
+		}
+
+		if (range.operator === Intersection.OPERATOR) {
+			let result = this.addRange(range.known_bounds);
+			for (let i = 0; i < range.parameters.length && result; i++)
+				result = this.addRange(range.parametrized_bounds[range.parameters[i]]);
+			return result;
+		}
+
+		if (Param.isParam(range.value)) {
+			let old_param = this.parametrized_bounds[range.value.$];
+			let new_param = old_param ? old_param.intersect(range) : range;
+			if (new_param === null)  {
+//				console.log('1',new_param, old_param, range);
+				return false;
+			}
+			this.parametrized_bounds[range.value.$] = new_param;
+			if (old_param === undefined) this.parameters.push(range.value.$); 
+		} else {
+			let known_bounds = this.known_bounds.intersect(range);
+			if (known_bounds === null) {
+//				console.log('2',known_bounds, this.known_bounds, range);
+				return false;
+			}
+			this.known_bounds = known_bounds;
+		}
+		return true;
 	}
 
-	get lower_bound() {
-		if (this.a.lower_bound && this.b.lower_bound) return this.a.lower_bound.intersect(this.b.lower_bound);
-		if (this.a.lower_bound) return this.a.lower_bound;
-		if (this.a.lower_bound) return this.a.lower_bound;
-		return null;
+	get comparator() {
+		return this.known_bounds.comparator || this.parametrized_bounds[this.parameters[0]].comparator;
 	}
 
 	contains(range) {
-		return this.a.contains(range) && this.b.contains(range);
+		let result = this.known_bounds.contains(range);
+		for (let i = 0; i < this.parameters.length && result === true; i++)
+			result = this.parametrized_bounds[this.parameters[i]].contains(range);
+		return result;
 	}
 
 	intersect(range) {
-		let a,b;
+		if (range.operator === Unbounded.OPERATOR) return this;
 
-		if (range.operator === Intersection.OPERATOR) {
-			a = this.intersect(range.a);
-			b = this.intersect(range.b);
-		} else {
-			a = range.intersect(this.a);
-			b = range.intersect(this.b);
+		if (range.operator === Intersection.OPERATOR || range.operator === Between.OPERATOR) {
+			let result = range.intersect(this.known_bounds);
+			for (let i = 0; i < this.parameters.length && result != null; i++)
+				result = result.intersect(this.parametrized_bounds[this.parameters[i]]);
+			return result;
 		}
 
-		return (a && b) ? new Intersection(a, b) : null;
+		let result = new Intersection(this.known_bounds, ...Stream.fromProperties(this.parametrized_bounds).toValues())	;
+
+		if (result.addRange(range)) return result;
+
+		return null;
 	}
 
 	toExpression(dimension, formatter, context)	{ 
 		return formatter.andExpr(
-				this.a.toExpression(dimension, formatter, context),
-				this.b.toExpression(dimension, formatter, context)
+				this.known_bounds.toExpression(dimension, formatter, context),
+				...Stream.fromProperties(this.parametrized_bounds)
+					.map(([param,bounds]) => bounds.toExpression(dimension, formatter, context))
+					.toArray()
 			)
 	}
 
 	get operator() { return Intersection.OPERATOR; }
 
 	equals(range) { 
-		return this.operator === range.operator 
-			&& this.a.equals(range.a) 
-			&& this.b.equals(range.b); 
+		if (this.operator === range.operator && this.known_bounds.equals(range.known_bounds)) {
+			if (this.parameters.length === range.parameters.length) {
+				let result = true;
+				for (i = 0; i < this.parameters.length && result; i++) {
+					let param = parameters[i];
+					let other_bound = range.parametrized_bounds[param];
+					result = other_bound && this.parametrized_bounds[param].equals(other_bound);
+				}
+				return result;
+			}
+		}
+		return false;
 	}
 
 	toString()	{ return JSON.stringify(this); }
 
 	toJSON()	{
-		return { $and : [ this.a, this.b ] };
+		return { $and : [ this.known_bounds.toJSON(), ...Stream.fromProperties(this.parametrized_bounds).toValues() ] };
 	}
 }
 
