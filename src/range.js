@@ -61,13 +61,6 @@ class Comparator {
 	lessThanOrEqual(a,b) 	{ return Comparator.paramsEqual(a,b) || (Comparator.params(a,b) ? null : !this.order(b,a)); }
 }
 
-class BoundsType {
-	static get UPPER() { return BoundsType._upper; }
-	static get LOWER() { return BoundsType._lower; }
-}
-
-BoundsType._upper = new BoundsType();
-BoundsType._lower = new BoundsType();
 
 /** Range is an abstract class representing a range of values.
 *
@@ -168,6 +161,8 @@ class Range {
 		}
 	}
 
+	/** Provide access to global Unbounded range
+	*/
 	static get UNBOUNDED() {
 		return new Unbounded();
 	}
@@ -256,7 +251,7 @@ class Range {
 	* varies according to the type of obj, and whether an explicit order function is provided.
 	*
 	* | Type of obj 	 | order 	| Result
-	* |------------------|-------------------
+	* |------------------|----------|--------
 	* | null			 | 			| null
 	* | undefined		 | 			| undefined
 	* | Range 			 | 			| obj
@@ -268,7 +263,7 @@ class Range {
 	* | Object 			 | default 	| Range.subquery(Query.from(obj)) 
 	*
 	* @param {Range~AnyValue} obj - value
-	@ @param {Function} [default_constructor=Range.equals] - constructor to use if Param or Comparable is provided
+	* @param {Function} [default_constructor=Range.equals] - constructor to use if Param or Comparable is provided
 	* @param {Range~OrderingFunction} [order=DEFAULT_ORDER] - compare two values and return true if the first is less than the second.
 	* @returns {Range} a range
 	*/
@@ -345,6 +340,8 @@ var RANGE_OPERATORS = {
 	"$and" 	: Range.and
 }
 
+/** Range representing an unbounded data set [i.e. no constraint on data returned]
+*/
 class Unbounded extends Range {
 
 	static get OPERATOR () { return '*'; }
@@ -359,6 +356,7 @@ class Unbounded extends Range {
 		return true;
 	}
 
+	/** unbounded interection with range always returns range. */
 	intersect(range) {
 		return range;
 	}
@@ -377,6 +375,10 @@ class Unbounded extends Range {
 
 	toJSON() {
 		return this.value;
+	}
+
+	bind(parameters) {
+		return this;
 	}
 }
 
@@ -425,9 +427,6 @@ class OpenRange extends Range {
 
 /** Range between two bounds.
 *
-* A range cannot be parametrized; it is the result of an 'and' operation on a lessThan and greaterThan 
-* range if the two ranges themselves are not parametrised. If these ranges are parametrised, the result 
-* is an intersection.
 */
 class Between extends Range {
 
@@ -453,7 +452,7 @@ class Between extends Range {
 			// intersection beween two valid lower bounds or two valid upper bounds should always exist
 			return lower_bound.intersect(upper_bound);
 		}
-		if (range.operator === Intersection.OPERATOR) {
+		if (range.operator === Intersection.OPERATOR) { 
 			let result = range.intersect(this.lower_bound);
 			if (result) result = result.intersect(this.upper_bound);
 			return result;
@@ -499,6 +498,14 @@ class Between extends Range {
 
 		return [ lower_bound_json, upper_bound_json ];
 	}
+
+	bind(parameters) {
+		let lower_bound = this.lower_bound.bind(parameters);
+		let upper_bound = this.upper_bound.bind(parameters);
+		if (this.lower_bound === lower_bound && this.upper_bound === upper_bound) return this;
+		// Possible that after binding lower bound may be greater than upper bound, in which case we return null
+		return new Range.between(lower_bound, upper_bound);
+	}
 }
 
 class Equals extends Range {
@@ -517,7 +524,6 @@ class Equals extends Range {
 	}
 
 	intersect(range) {
-		if (range.operator === Unbounded.OPERATOR) return this;
 		if (range.operator !== Equals.OPERATOR) 
 			return (range.intersect(this));
 
@@ -542,6 +548,14 @@ class Equals extends Range {
 	toJSON() {
 		return this.value;
 	}
+
+	bind(parameters) {
+		if (Param.isParam(this.value)) {
+			let param = parameters[this.value.$];
+			if (param !== undefined) return new Equals(param);
+		}
+		return this;
+	}
 }
 
 class LessThan extends OpenRange {
@@ -559,9 +573,9 @@ class LessThan extends OpenRange {
 			return this.comparator.lessThanOrEqual(range.value, this.value);
 		if (range.operator === Between.OPERATOR) 
 			return this.contains(range.upper_bound);
-		// TODO: not working yet
-		if (range.operator === Intersection.OPERATOR) 
-			return this.contains(range.upper_bound);
+		if (range.operator === Intersection.OPERATOR) {
+			return range.containedBy(this);
+		}
 
 		return false; 
 	}
@@ -620,6 +634,14 @@ class LessThan extends OpenRange {
 
 		throw new RangeError("Uknown operator: ", range.operator);
 	}
+
+	bind(parameters) {
+		if (Param.isParam(this.value)) {
+			let param = parameters[this.value.$];
+			if (param !== undefined) return new LessThan(param);
+		}
+		return this;
+	}
 }
 
 
@@ -636,7 +658,9 @@ class LessThanOrEqual extends OpenRange {
 			return this.comparator.lessThanOrEqual(range.value, this.value);
 		if (range.operator === Between.OPERATOR) 
 			return this.contains(range.upper_bound);
-
+		if (range.operator === Intersection.OPERATOR) {
+			return range.containedBy(this);
+		}
 		return false;
 	}
 
@@ -711,6 +735,13 @@ class LessThanOrEqual extends OpenRange {
 		throw new RangeError("Uknown operator: ", range.operator);
 	}
 
+	bind(parameters) {
+		if (Param.isParam(this.value)) {
+			let param = parameters[this.value.$];
+			if (param !== undefined) return new LessThanOrEqual(param);
+		}
+		return this;
+	}
 }
 
 class GreaterThan extends OpenRange {
@@ -729,7 +760,9 @@ class GreaterThan extends OpenRange {
 			return this.comparator.greaterThanOrEqual(range.value, this.value);
 		if (range.operator === Between.OPERATOR) 
 			return this.contains(range.lower_bound);
-
+		if (range.operator === Intersection.OPERATOR) {
+			return range.containedBy(this);
+		}
 		return false;
 	}
 
@@ -786,6 +819,14 @@ class GreaterThan extends OpenRange {
 
 		throw new RangeError("Uknown operator: ", range.operator);
 	}
+
+	bind(parameters) {
+		if (Param.isParam(this.value)) {
+			let param = parameters[this.value.$];
+			if (param !== undefined) return new GreaterThan(param);
+		}
+		return this;
+	}
 }
 
 class GreaterThanOrEqual extends OpenRange {
@@ -803,7 +844,9 @@ class GreaterThanOrEqual extends OpenRange {
 			return this.comparator.greaterThanOrEqual(range.value, this.value);
 		if (range.operator === Between.OPERATOR) 
 			return this.contains(range.lower_bound);
-
+		if (range.operator === Intersection.OPERATOR) {
+			return range.containedBy(this);
+		}
 		return false;
 	}
 
@@ -877,6 +920,14 @@ class GreaterThanOrEqual extends OpenRange {
 
 		throw new RangeError("Uknown operator: " + range.operator);
 	}
+
+	bind(parameters) {
+		if (Param.isParam(this.value)) {
+			let param = parameters[this.value.$];
+			if (param !== undefined) return new GreaterThanOrEqual(param);
+		}
+		return this;
+	}
 }
 
 class Subquery extends Range {
@@ -919,6 +970,13 @@ class Subquery extends Range {
 	toJSON() {
 		return this.query;
 	}	
+
+	bind(parameters) {
+		let query = this.query.bind(parameters);
+		if (query !== this.query) return new Subquery(query);
+		if (query === null) return null;
+		return this;
+	}
 }
 
 /** Support a deferred intersection between parametrized ranges.
@@ -933,7 +991,9 @@ class Intersection extends Range {
 	/** construct an intersection
 	*
 	* Note: will throw an error if result is logically empty. We should only call this method with
-	* ranges that are known to not to be exclusive, and should only call it with simple unary ranges. 
+	* ranges that are known to not to be exclusive, and should only call it with simple unary ranges or
+	* 'between' ranges.
+	* 
 	* Use repeated calls of .intersect to build an intersection without these limitations.
 	*/
 	constructor(...ranges) {
@@ -998,6 +1058,30 @@ class Intersection extends Range {
 		return result;
 	}
 
+	/** Determine if this range contained by another.
+	*
+	*
+	*/
+	containedBy(range) {
+
+		// range contains intersection if it contains the known bounds, or any of the parameterized bounds
+		if (range.contains(this.known_bounds)) return true;
+		// the only way we can know that this range contains a parametrized range is if they have the same
+		// parameter. 
+		if (Param.isParam(range.value)) {
+			let prange = this.parametrized_bounds[range.value.$];
+			return (prange && range.contains(prange));
+		}
+		//However, we can return a definitive false if all the parametrized bounds return false,
+		// which can happen, for example, if a 'less than' is compared to a 'greater than'
+		if (Stream
+			.fromProperties(this.parametrized_bounds)
+			.every(([param,bounds])=>range.contains(bounds)===false))
+			return false;
+			
+		return null;
+	}
+
 	intersect(range) {
 		if (range.operator === Unbounded.OPERATOR) return this;
 
@@ -1008,6 +1092,7 @@ class Intersection extends Range {
 			return result;
 		}
 
+		// essentially, clone this intersection
 		let result = new Intersection(this.known_bounds, ...Stream.fromProperties(this.parametrized_bounds).toValues())	;
 
 		if (result.addRange(range)) return result;
@@ -1045,6 +1130,13 @@ class Intersection extends Range {
 
 	toJSON()	{
 		return { $and : [ this.known_bounds.toJSON(), ...Stream.fromProperties(this.parametrized_bounds).toValues() ] };
+	}
+
+	bind(parameters) {
+		let result = this.known_bounds;
+		for (let i = 0; i < this.parameters.length && result; i++)
+			result = result.intersect(this.parametrized_bounds[this.parameters[i]].bind(parameters));
+		return result;
 	}
 }
 

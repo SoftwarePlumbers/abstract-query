@@ -146,6 +146,21 @@ describe('Range', () => {
         expect(range2.contains(range3)).to.be.true;
     });
 
+    it('correct containment for lessThan and intersection', () => {
+        let range1 = Range.lessThan(37);
+        let range2 = Range.lessThan($.param1);
+        let range3 = Range.lessThan($.param2);
+        let range4 = range1.intersect(range2).intersect(range3);
+        let range5 = Range.greaterThan($.param1);
+        let range7 = Range.lessThan(8);
+
+        expect(range1.contains(range4)).to.be.true;
+        expect(range2.contains(range4)).to.be.true;
+        expect(range3.contains(range4)).to.be.true;
+        expect(range5.contains(range4)).to.be.false;
+        expect(range7.contains(range4)).to.be.null;
+    });
+
     it('correct containment for lessThanOrEqual', () => {
     	let range1 = Range.lessThanOrEqual(37);
     	let range2 = Range.lessThanOrEqual(14);
@@ -455,6 +470,14 @@ describe('Range', () => {
         let range12 = range10.intersect(range11);
 
         expect(range12).to.be.null;
+    });
+
+    it('can bind parameters', () => {
+        let range1 = Range.between($.param1, $.param2).intersect(Range.lessThan(50));
+        expect(range1.bind({param1: 34, param2: 55})).to.deep.equal(Range.between(34, 50));
+        expect(range1.bind({param1: 34, param2: 45})).to.deep.equal(Range.between(34, 45));
+        expect(range1.bind({param2: 45})).to.deep.equal(Range.between($.param1, 45));
+        expect(range1.bind({param1: 52})).to.be.null;
     });
 
 });
