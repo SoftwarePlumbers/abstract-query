@@ -57,14 +57,19 @@ class Param {
 	}
 }
 
-/** Proxy handler for factory. */
+/** Proxy handler for factory. 
+* @private
+*/
 const FACTORY_HANDLER = {
 	get(target, property) {
 		return Param.from(property);
 	}
 }
 
-/** Proxied factory. Factory.<name> is equivalent to Param.from("<name>")
+/** Parameter factory.
+*
+* The factory object is assigned to the global varioable '$' so that $.__name__ is equivalent to Param.from("__name__").
+* Thus parameters have a reasonably familiar appearance (given the use of $ to prefix parameters in many scripting languages)
 */
 const $ = new Proxy({}, FACTORY_HANDLER);
 
