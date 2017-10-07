@@ -26,6 +26,8 @@ and expression should equal:
 
 Note that the common expression `grade<"C"` has been factored out of the 'or'. Plainly that's not all that much use in this simple example but when programatically constructing complex queries it is extremely useful to ensure that the query that ultimately sent to the data store is reasonably concise.
 
+## Expression Formatters
+
 The `toExpression` method takes a formatter object so that query objects can be used to create any kind of output. For example:
 
 ```javascript
@@ -45,7 +47,81 @@ Will result in an expr like:
 
 `grade<"C" && (course="javascript 101" && student[age>="21"] || course="medieval French poetry" && student[age>="40" && age<"65"])`
 
-The objective is to provide several different expression formatters, to support (at a minumum) constructing javascript expressions for filtering arrays, mongodb queries, and mysql queries. These formatters will be provided in separate packages so that a code can be written to the abstract-query API without creating a dependency on any given back-end store.
+The objective is to provide several different expression formatters, to support (at a minumum) constructing suitable expressions for IndexedDB, MongoDB, and MySQL. These formatters will be provided in separate packages so that a code can be written to the abstract-query API without creating a dependency on any given back-end store. 
+
+## Filtering Arrays and Iterables
+
+Abstract Query itself provides a simple 'predicate' property that can be used to filter arrays. For example:
+
+```javascript
+let data = [ 
+    { name: 'jonathan', age: 12}, 
+    { name: 'cindy', age: 18}, 
+    { name: 'ada', age: 21} 
+];
+
+let query = Query.from({ age: [,18]});
+let result = data.filter(query.predicate);
+```
+
+Will filter all the items with age less than 18 from the given data array. While the query API offers little advantage over an anonymous predicate function in this simple example, the ability to compose, optimise, and parametrize queries is a significant benefit in more complex cases. As more expression formatters are built, the ability to use a single query format across native data structures, front-end data stores, and back-end data stores will provide significant benefits to code readability and portability.
+
+## Parameters
+
+Of course, abstract query also supports parametrized queries.
+
+```javascript
+let query = Query
+    .from({ course: 'javascript 101', student: { age : [$.min_age,] }, grade: [,'C']})
+    .or({ course: 'medieval French poetry', student: { age: [$.min_age, 65]}, grade: [,'C']})
+
+let expr = query.toExpression();
+```
+
+Will result in an expr like:
+
+`grade<"C" and (course="javascript 101" and (student.age>=$min_age) or course="medieval French poetry" and (student.age>=$min_age and student.age<65))`
+
+Parameters can be bound to create a new query, thus given the query above:
+
+```javascript
+let expr2 = query
+	.bind({min_age: 27})
+	.toExpression();
+```
+
+Will result in an expr like:
+
+`grade<"C" and (course="javascript 101" and (student.age>=27) or course="medieval French poetry" and (student.age>=27 and student.age<65))`
+
+The library re-optimises the query when parameters are bound, and also tries quite hard to indentify redundant or mutually exclusive criteria even if a query is parametrised.
+
+## Subqueries and Child Objects
+
+Subqueries can be used to put conditions on sub-properties. In the below example, the subquery 'expertise_query' is used to pick items in the data array which have an object in 'expertise' which has a language property of 'java'.
+
+```javascript
+let data = [ 
+    { 	name: 'jonathan',
+    	age: 45 
+    	expertise: [ 
+    		{ language:'java', level:'expert' }, 
+    		{ language:'javascript', level:'novice' }
+    	] 
+    }, ...other entries...
+];
+
+let expertise_query = Query.from({ language:'java' });
+
+let result = data.filter(Query
+	.from({ age: [,50], expertise: expertise_query })
+	.predicate
+);
+```
+
+Note that it is not necessary to create a subquery as a separate object, the final query could have been written `Query.from({ age: [,50], expertise: { language:'java' }})` with identical effect. Subquery syntax can also be used to filter on properties that are not arrays (for example, the code above would work unchanged if 'expertise' was not an array but a simple object containing language and level properties).
+
+## Caching
 
 Abstract query will also aid in building any kind of caching layer. Because abstract-query actually stores the query in an internal canoncial form, two queries can be compared for equality even if they are outwardly somewhat different. Thus:
 

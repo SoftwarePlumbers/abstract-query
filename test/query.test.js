@@ -215,4 +215,97 @@ describe('Query', () => {
     });
 
 
+    it('sample code for README.md with parameters tests OK', ()=>{
+        let query = Query
+            .from({ course: 'javascript 101', student: { age : [$.min_age,] }, grade: [,'C']})
+            .or({ course: 'medieval French poetry', student: { age: [$.min_age, 65]}, grade: [,'C']})
+
+        let expr = query.toExpression();
+        expect(expr).to.equal('grade<"C" and (course="javascript 101" and (student.age>=$min_age) or course="medieval French poetry" and (student.age>=$min_age and student.age<65))');
+
+        let expr2 = query.bind({min_age: 27}).toExpression();
+        expect(expr2).to.equal('grade<"C" and (course="javascript 101" and (student.age>=27) or course="medieval French poetry" and (student.age>=27 and student.age<65))');
+    });
+
+    it('sample code for README.md with predicate tests OK', ()=>{
+
+        let data = [ 
+            { name: 'jonathan', age: 12}, 
+            { name: 'cindy', age: 18}, 
+            { name: 'ada', age: 21} 
+        ];
+
+        let query = Query.from({ age: [,18]});
+        let result = data.filter(query.predicate);
+
+        expect(result).to.have.length(1);
+    });
+
+    it('sample code for README.md with subquery tests OK', ()=>{
+
+            let data = [ 
+                { name: 'jonathan', age: 47, expertise: [ { language:'java', level:'expert' }, { language:'javascript', level:'novice'}] }, 
+                { name: 'cindy', age: 34, expertise: [ { language:'java', level:'novice' } ] }, 
+                { name: 'ada', age: 32, expertise: [ { language:'javascript', level:'expert'} ] } 
+            ];
+
+            let expertise_query = Query.from({ language:'java' });
+            let query = Query.from({ age: [,50], expertise: expertise_query })
+
+            let result = data.filter(query.predicate);
+
+            expect(result).to.have.length(2);
+            expect(query.toExpression()).to.equal('age<50 and (expertise.language="java")');
+            expect(query).to.deep.equal(Query.from({ age: [,50], expertise: { language:'java' }}));
+
+    });
+
+    it('can filter a stream', ()=>{
+        let data = [
+            {   name: 'jonathan', 
+                age: '47', 
+                courses: [ 
+                    { name: 'javascript', grade: 'A' }, 
+                    { name: 'python', grade: 'B'} 
+                ] 
+            },
+            {   name: 'peter', 
+                age: '19', 
+                courses: [ 
+                    { name: 'javascript', grade: 'C' }, 
+                ] 
+            },
+            {   name: 'paul', 
+                age: '25', 
+                courses: [ 
+                    { name: 'python', grade: 'B'} 
+                ] 
+            },
+            {   name: 'cindy', 
+                age: '25', 
+                courses: [ 
+                    { name: 'javascript', grade: 'A' }, 
+                    { name: 'python', grade: 'A'} 
+                ] 
+            },
+            {   name: 'steve', 
+                age: '29', 
+                courses: [ 
+                    { name: 'javascript', grade: 'C' }, 
+                    { name: 'python', grade: 'F'} 
+                ] 
+            }
+        ]
+
+        let query1 = Query.from({ age: [26,]});
+        let result = data.filter(query1.predicate);
+        expect(result).to.have.length(2);
+        expect(result).to.deep.equal(data.filter(item=>item.age>=26));
+        let query2 = Query.from({ courses: { name: 'python'}});
+        let result2 = data.filter(query2.predicate);
+        expect(result2).to.have.length(4);
+        expect(result2).to.deep.equal(data.filter(item=>item.courses.find(course=>course.name==='python')));
+    });
+
+
 });

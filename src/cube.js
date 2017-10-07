@@ -28,6 +28,14 @@ class Cube {
 			});
 	}
 
+	containsItem(item) {
+		return Stream
+			.fromProperties(this)
+			.every(([dimension,range]) => {
+				return  item[dimension] && range.containsItem(item[dimension]);
+			});		
+	}
+
 	intersect(other) {
 
 		let result = Object.assign(new Cube(), this, other);

@@ -370,7 +370,7 @@ class Query {
 	/** Establish if this results of this query would be a superset of the given query.
 	*
 	* @param {Query} other_query - the other query
-	* @returns true if other query is a subset of this one.
+	* @returns true if other query is a subset of this one, false if it isn't, null if containment is indeterminate
 	*/
 	containsQuery(other_query) {
 		for (let cube of other_query.union) {
@@ -384,7 +384,7 @@ class Query {
 	*
 	* @private
 	* @param {Cube} cube - the cube
-	* @returns true if cube is a subset of this one.
+	* @returns true if cube is a subset of this one, false if it isn't, null if containment is indeterminate
 	*/
 	_containsCube(cube) {
 		for (let c of this.union) {
@@ -394,19 +394,45 @@ class Query {
 		return false;
 	}
 
+	/** Establish if a specific data item should be in the results of this query
+	*
+	* Very similar to `contains`. For an 'item' with simple properties, the result should be identical. 
+	* However an object provided to `contains` is assumed to be a constraint, so properties with array/object
+	* values are processed as ranges. An item provided to 'containsItem' is an individual data item to test,
+	* so array and object properties are not processed as ranges.
+	*
+	* @param item to test
+	* @returns true, false or null
+	*/
+	containsItem(item) {
+		for (let c of this.union) {
+			let contains_item = c.containsItem(item);
+			if (contains_item || contains_item === null) return contains_item;
+		}
+		return false;		
+	}
+
 	/** Establish if this results of this query would be a superset of the given constraint.
 	*
 	* @param {Query~ConstraintObject} constraint - the constraint
-	* @returns true if constraint is a subset of this query.
+	* @returns true if constraint is a subset of this query, false if it isn't, null if containment is indeterminate
 	*/
-	containsConstraint(donstraint) {
+	containsConstraint(constraint) {
 		return this._containsCube(new Cube(constraint));
 	}
 
 	/** Establish if this results of this query would be a superset of the given constraint or query.
 	*
+	* Containment may be indeterminate one or more of the queries/constraints involved is parametrized and containment
+	* cannot be determined until the parameter values are known. However, the library works quite hard to identify 
+	* cases where containment can be determined even if the query is parametrized. For example:
+	* ```
+	* Query.from({ height: [$.param1, 12]}).contains(Query.from{ height[13, $.param2]})
+	* ```
+	* will return false since the two ranges can never overlap even though they are parametrized.
+	*
 	* @param {Query~ConstraintObject|Query} obj - the constraint or query
-	* @returns true if obj is a subset of this query.
+	* @returns true if obj is a subset of this query, false if it isn't, null if containment is indeterminate
 	*/
 	contains(obj) {
 		if (obj instanceof Query) return this.containsQuery(obj);
@@ -461,6 +487,21 @@ class Query {
 		return this.equalsConstraint(obj);
 	}
 
+	/** Bind a set of paramters to a query. 
+	*
+	* Property values from the parameters object are used to fill in values for any parameters that
+	* this query was created. So:
+	* ```
+	* Query
+	*	.from({ height : [$.floor, $.ceiling]})
+	*	.bind({ floor:12, ceiling: 16})
+	*	.toExpression();
+	* ```
+	* will return something like `height >= 12 and height < 16`.
+	*
+	* @param {Object} parameter values
+	* @returns {Query} new query, with parameter values set.
+	*/
 	bind(parameters) {
 		let cubes = Stream
 			.from(this.union)
@@ -470,6 +511,17 @@ class Query {
 
 		return cubes.length > 0 ? new Query(cubes) : null;
 	}
+
+	/** Convenience property for filtering
+	*
+	* Given a query, query.predicate is equal to item=>this.contains(item);
+	*
+	@ returns {Function} a function that returns true if its parameter is matched by this query.
+	*/
+	get predicate() {
+		return item => this.containsItem(item);
+	}
+
 }
 
 module.exports = Query;

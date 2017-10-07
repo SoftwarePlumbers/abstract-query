@@ -64,7 +64,7 @@ class Comparator {
 
 /** Range is an abstract class representing a range of values.
 *
-* Objects extending range should implement 'contains' and 'intersect' operations.
+* Objects extending range should implement 'contains', 'intersect', 'equals', and 'bind' operations.
 *
 * Not all ranges are necessarily continuous (like dates/times) or numeric. A Range may also represent
 * a node in a directed graph - in which case 'contains' may mean 'is a parent of' and 'intersect' may 
@@ -341,6 +341,8 @@ var RANGE_OPERATORS = {
 }
 
 /** Range representing an unbounded data set [i.e. no constraint on data returned]
+*
+* @private
 */
 class Unbounded extends Range {
 
@@ -353,6 +355,10 @@ class Unbounded extends Range {
 	get operator() { return Unbounded.OPERATOR; }
 
 	contains(range) {
+		return true;
+	}
+
+	containsItem(item) {
 		return true;
 	}
 
@@ -382,7 +388,10 @@ class Unbounded extends Range {
 	}
 }
 
-
+/** Base class for ranges with a single bound (e.g. less than, greater than etc.)
+*
+* @private
+*/
 class OpenRange extends Range {
 
 	constructor(operator, value, order = DEFAULT_ORDER) {
@@ -427,6 +436,7 @@ class OpenRange extends Range {
 
 /** Range between two bounds.
 *
+* @private
 */
 class Between extends Range {
 
@@ -442,6 +452,10 @@ class Between extends Range {
 
 	contains(range) {
 		return this.lower_bound.contains(range) && this.upper_bound.contains(range);
+	}
+
+	containsItem(item) {
+		return this.lower_bound.containsItem(range) && this.upper_bound.containsItem(range);
 	}
 
 	intersect(range) {
@@ -508,6 +522,9 @@ class Between extends Range {
 	}
 }
 
+/** Range exactly equal to some value
+* @private
+*/
 class Equals extends Range {
 
 	static get OPERATOR () { return '='; }
@@ -521,6 +538,11 @@ class Equals extends Range {
 
 	contains(range) {
 		return this.equals(range);
+	}
+
+
+	containsItem(item) {
+		return Param.isParam(this.value) ? null : this.comparator.equals(this.value, item);
 	}
 
 	intersect(range) {
@@ -558,6 +580,10 @@ class Equals extends Range {
 	}
 }
 
+/** Range less than some bound.
+*
+* @private
+*/
 class LessThan extends OpenRange {
 
 	static get OPERATOR () { return '<'; }
@@ -578,6 +604,10 @@ class LessThan extends OpenRange {
 		}
 
 		return false; 
+	}
+
+	containsItem(item) {
+		return Param.isParam(this.value) ? null : this.comparator.lessThan(item, this.value);
 	}
 
 	intersect(range) {
@@ -645,6 +675,10 @@ class LessThan extends OpenRange {
 }
 
 
+/** Range less than or equal to some bound
+*
+* @private
+*/
 class LessThanOrEqual extends OpenRange {
 
 	static get OPERATOR () { return '<='; }
@@ -662,6 +696,10 @@ class LessThanOrEqual extends OpenRange {
 			return range.containedBy(this);
 		}
 		return false;
+	}
+
+	containsItem(item) {
+		return Param.isParam(this.value) ? null : this.comparator.lessThanOrEqual(item, this.value);
 	}
 
 	intersect(range) {
@@ -744,6 +782,10 @@ class LessThanOrEqual extends OpenRange {
 	}
 }
 
+/** Range greater than some bound
+*
+* @private
+*/
 class GreaterThan extends OpenRange {
 
 	static get OPERATOR () { return '>'; }
@@ -764,6 +806,10 @@ class GreaterThan extends OpenRange {
 			return range.containedBy(this);
 		}
 		return false;
+	}
+
+	containsItem(item) {
+		return Param.isParam(this.value) ? null : this.comparator.greaterThan(item, this.value);
 	}
 
 	intersect(range) {
@@ -829,6 +875,10 @@ class GreaterThan extends OpenRange {
 	}
 }
 
+/** Range greater than or equal to some bound
+*
+* @private
+*/
 class GreaterThanOrEqual extends OpenRange {
 
 	static get OPERATOR () { return '>='; }
@@ -849,6 +899,11 @@ class GreaterThanOrEqual extends OpenRange {
 		}
 		return false;
 	}
+
+	containsItem(item) {
+		return Param.isParam(this.value) ? null : this.comparator.greaterThanOrEqual(item, this.value);
+	}
+
 
 	intersect(range) {
 
@@ -943,6 +998,16 @@ class Subquery extends Range {
 	contains(range) {
 		if (range.operator === Subquery.OPERATOR) return this.query.contains(range.query);
 		return false;
+	}
+
+	containsItem(item) {
+		let result = false;
+		Stream.from(item).find(element => {
+			let contained = this.query.containsItem(element);
+			if (contained || contained === null) result = contained;
+			return result;
+		});
+		return result;
 	}
 
 	intersect(range) {
@@ -1058,7 +1123,13 @@ class Intersection extends Range {
 		return result;
 	}
 
-	/** Determine if this range contained by another.
+	containsItem(item) {
+		let result = this.known_bounds.contains(item);
+		for (let i = 0; i < this.parameters.length && result === true; i++)
+			result = this.parametrized_bounds[this.parameters[i]].containsItem(item);
+		return result;
+	}
+		/** Determine if this range contained by another.
 	*
 	*
 	*/
