@@ -155,7 +155,7 @@ class Range {
 		upper = Range.fromValue(upper, Range.lessThan, order);
 
 		if (lower && upper) {
-			return new Between(lower,upper);
+			return lower.intersect(upper);
 		} else {
 			return upper || lower;
 		}
@@ -504,7 +504,7 @@ class Between extends Range {
 		let upper_bound = this.upper_bound.bind(parameters);
 		if (this.lower_bound === lower_bound && this.upper_bound === upper_bound) return this;
 		// Possible that after binding lower bound may be greater than upper bound, in which case we return null
-		return new Range.between(lower_bound, upper_bound);
+		return Range.between(lower_bound, upper_bound);
 	}
 }
 
@@ -552,7 +552,7 @@ class Equals extends Range {
 	bind(parameters) {
 		if (Param.isParam(this.value)) {
 			let param = parameters[this.value.$];
-			if (param !== undefined) return new Equals(param);
+			if (param !== undefined) return new Equals(param, this.comparator.order);
 		}
 		return this;
 	}

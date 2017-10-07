@@ -1,5 +1,6 @@
 const Range = require( '../src/range');
 const Cube = require( '../src/cube');
+const { $ } = require('../src/param');
 const chai = require('chai');
 const debug = require('debug')('abstract-query~tests');
 const expect = chai.expect;
@@ -50,7 +51,18 @@ describe('Cube', () => {
     	} catch (err) {
     		// ok
     	}
+    });
 
+    it('can bind parameters', () =>{
+        let cube1 = new Cube( { x: [22, $.param1], y : [$.param2, $.param3], z: { type: $.param4 } } );
+        let cube2 = cube1.bind({ param5: 'slartibartfast'});
+        expect(cube2).to.deep.equal(cube1);
+        let cube3 = cube1.bind({ param1: 44, param3: 66});
+        expect(cube3).to.deep.equal(new Cube( { x: [22, 44], y: [$.param2, 66], z: { type: $.param4 } }));
+        let cube4 = cube1.bind({ param1: 20, param3: 66});
+        expect(cube4).to.be.null;
+        let cube5 = cube1.bind({ param1: 44, param2: 11, param3: 66, param4: 'idiocy'});
+        expect(cube5).to.deep.equal(new Cube( { x: [22, 44], y: [11, 66], z: { type: 'idiocy' } }));
     });
 
 });

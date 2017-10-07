@@ -71,6 +71,15 @@ class Cube {
 			).toArray()
 		);
 	}
+
+	bind(parameters) {
+		let new_constraints = {};
+		let found_null = Stream.fromProperties(this).find(([dimension,constraint]) => {
+			new_constraints[dimension] = constraint.bind(parameters);
+			return new_constraints[dimension] === null;
+		});
+		return found_null ? null : new Cube(new_constraints);
+	}
 }
 
 module.exports = Cube;

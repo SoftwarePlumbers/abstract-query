@@ -294,9 +294,9 @@ describe('Range', () => {
         let range1 = Range.from({count: [$.param1,]});
         let range2 = Range.from({count: [$.param2,]});
         let range3 = Range.from({count: $.param1});
-        expect(range1.contains(range2)).to.be.false;
-        expect(range2.contains(range1)).to.be.false;
-        expect(range1.contains(range3)).to.be.true;
+        expect(range1.contains(range2)).to.be.null; // cant tell, contains if $.param1 === $.param2
+        expect(range2.contains(range1)).to.be.null;
+        expect(range1.contains(range3)).to.be.true; 
     });
 
     it('correct intersection for equals', () => {

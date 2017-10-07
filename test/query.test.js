@@ -1,4 +1,4 @@
-const { Query, Range } = require( '../src');
+const { Query, Range, $ } = require( '../src');
 const chai = require('chai');
 const debug = require('debug')('abstract-query~tests');
 const expect = chai.expect;
@@ -55,6 +55,22 @@ describe('Query', () => {
     	expect(query.union[0]).to.deep.equal({x: Range.equals(2), y: Range.equals(4)}); 
     }); 
 
+    it('redundant parametrized constraints are suppressed', () => {
+        let query = Query
+            .from({x: Range.equals($.param1), y: Range.equals(4)})
+            .or({ x: Range.equals($.param1)});
+
+        expect(query.union.length).to.equal(1);
+        expect(query.union[0]).to.deep.equal({ x: Range.equals($.param1) }); 
+
+        query = Query
+            .from({x: Range.equals($.param1), y: Range.equals(4)})
+            .and({ x: Range.equals($.param1)});
+
+        expect(query.union.length).to.equal(1);
+        expect(query.union[0]).to.deep.equal({x: Range.equals($.param1), y: Range.equals(4)}); 
+    }); 
+
     it('creates expression', () => {
     	let query = Query
     		.from({x: [,2], y: 4})
@@ -85,6 +101,15 @@ describe('Query', () => {
     	expect(expression).to.equal('x<2 and (y.alpha>=2 and y.alpha<6 and (y.beta.nuts="brazil"))');
     });
 
+    it('creates expression with paramters', () => {
+        let query = Query
+            .from({x: [$.param1,2], y: $.param2});
+
+        let expression = query.toExpression();
+
+        expect(expression).to.equal('x>=$param1 and x<2 and y=$param2');
+    });
+
     it('has working equals operation', () => {
     	let query1 = Query
     		.from({x: [,2], y: { alpha: [2,6], beta: { nuts: 'brazil' }}});
@@ -99,6 +124,17 @@ describe('Query', () => {
     	expect(query1.equals(query4)).to.be.false;
     	expect(query1.and(query3).equals(query3.and(query1))).to.be.true;
     	expect(query1.or(query3).equals(query3.or(query1))).to.be.true;
+    });
+
+    it('has working equals operation with parameters', () => {
+        let query1 = Query
+            .from({x: [,$.param1], y: { alpha: [2,6], beta: { nuts: $.param2 }}});
+        let query2 = Query
+            .from({y: { beta: { nuts: $.param2 }, alpha: [2,6]}, x: [,$.param1]});
+        let query3 = Query
+            .from({x: [,$.param1], y: { alpha: [2,6], beta: { nuts: $.param3 }}});
+        expect(query1.equals(query2)).to.be.true;
+        expect(query1.equals(query3)).to.be.false;
     });
 
     it('has working contains operation', () => {
@@ -117,6 +153,19 @@ describe('Query', () => {
     	expect(query1.or(query4).contains(query1)).to.be.true;
     	expect(query1.contains(query1.and(query4))).to.be.true;
    	});
+
+    it('has working contains operation with parameters', () => {
+        let query2 = Query
+            .from({x: [$.param1,2], y: { alpha: [2,$.param3], beta: { nuts: $.param2 }}});
+        let query3 = Query
+            .from({x: [$.param1,2], y: { alpha: [2,8], beta: { nuts: $.param2 }}});
+        let query4 = Query
+            .from({x: [$.param1,9], y: { alpha: [2,8], beta: { nuts: $.param2 }}});
+        expect(query4.contains(query3)).to.be.true; 
+        expect(query3.contains(query4)).to.be.false; 
+        expect(query3.contains(query2)).to.be.null;
+        expect(query2.contains(query3)).to.be.null;
+    });
 
     it('factorizes', () => {
     	let query = Query
@@ -138,9 +187,9 @@ describe('Query', () => {
     	let query = Query
     		.from({x: 2, y : [3,4], z : 8})
     		.or({x:2, y: [,4], z: 7})
-    		.or({x:3, y: [3,], z: 7});
+    		.or({x:3, y: [3,], z: $.param1});
     	let json = JSON.stringify(query);
-    	expect(json).to.equal('{"union":[{"x":2,"y":[3,4],"z":8},{"x":2,"y":[null,4],"z":7},{"x":3,"y":[3,null],"z":7}]}');
+    	expect(json).to.equal('{"union":[{"x":2,"y":[3,4],"z":8},{"x":2,"y":[null,4],"z":7},{"x":3,"y":[3,null],"z":{"$":"param1"}}]}');
     });
 
     it('sample code for README.md tests OK', ()=>{

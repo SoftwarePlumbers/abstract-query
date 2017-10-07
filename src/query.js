@@ -373,8 +373,10 @@ class Query {
 	* @returns true if other query is a subset of this one.
 	*/
 	containsQuery(other_query) {
-		for (let cube of other_query.union)
-			if (!this._containsCube(cube)) return false
+		for (let cube of other_query.union) {
+			let cube_contained = this._containsCube(cube);
+			if (!cube_contained) return cube_contained;
+		}
 		return true;
 	}
 
@@ -386,7 +388,8 @@ class Query {
 	*/
 	_containsCube(cube) {
 		for (let c of this.union) {
-			if (c.contains(cube)) return true;
+			let contains_cube = c.contains(cube);
+			if (contains_cube || contains_cube === null) return contains_cube;
 		}
 		return false;
 	}
@@ -456,6 +459,16 @@ class Query {
 		if (obj instanceof Query) return this.equalsQuery(obj);
 		if (obj instanceof Cube) return this._equalsCube(obj);
 		return this.equalsConstraint(obj);
+	}
+
+	bind(parameters) {
+		let cubes = Stream
+			.from(this.union)
+			.map(cube => cube.bind(parameters))
+			.filter(cube => cube !== null)
+			.toArray();
+
+		return cubes.length > 0 ? new Query(cubes) : null;
 	}
 }
 

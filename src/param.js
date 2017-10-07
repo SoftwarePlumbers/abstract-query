@@ -47,6 +47,14 @@ class Param {
 	equals(param) {
 		return param.$ === this.$;
 	}
+
+	/** Convert parameter to a string
+	*
+	* @returns the parameter name, prefixed with a '$' symbol.
+	*/
+	toString() {
+		return '$' + this.$;
+	}
 }
 
 /** Proxy handler for factory. */
