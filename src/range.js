@@ -269,26 +269,7 @@ class Range {
 	*/
 	static fromValue(obj, default_constructor = Range.equals, order = DEFAULT_ORDER) {
 
-		if (!obj) return obj;
-		if (Range.isRange(obj)) return obj;
-		if (Query.isQuery(obj)) return Range.subquery(obj);
-
-		let propname = Object.keys(obj)[0];
-		let constructor = Range.OPERATORS[propname];
-		
-		// if Range.OPERATORS contained a value, we have a bounds object
-		if (constructor) { 
-			let value = obj[propname];
-			value = Param.isParamObject(value) ? Param.from(value) : value;
-			return constructor(value, order);
-		} else {
-			let value = Param.isParamObject(obj) ? Param.from(obj) : obj;
-			if (typeof value !== 'object' || Param.isParam(value) || order !== DEFAULT_ORDER)
-				return default_constructor(value, order)
-			else
-				return Range.subquery(Query.from(value));
-		}
-
+		return fuckingcommonjscylicdependencybullshit(obj, default_constructor, order);
 	}
 
 	/** Create a range.
@@ -1211,7 +1192,30 @@ class Intersection extends Range {
 	}
 }
 
-module.exports = Range;
+module.exports = Range; 
 
-// Cyclic dependency.
-var Query = require('./query');
+const Query = require('./query');
+
+/** @private */
+function fuckingcommonjscylicdependencybullshit(obj, default_constructor = Range.equals, order = DEFAULT_ORDER) {
+		if (!obj) return obj;
+		if (Range.isRange(obj)) return obj;
+		if (Query.isQuery(obj)) return Range.subquery(obj);
+
+		let propname = Object.keys(obj)[0];
+		let constructor = Range.OPERATORS[propname];
+		
+		// if Range.OPERATORS contained a value, we have a bounds object
+		if (constructor) { 
+			let value = obj[propname];
+			value = Param.isParamObject(value) ? Param.from(value) : value;
+			return constructor(value, order);
+		} else {
+			let value = Param.isParamObject(obj) ? Param.from(obj) : obj;
+			if (typeof value !== 'object' || Param.isParam(value) || order !== DEFAULT_ORDER)
+				return default_constructor(value, order)
+			else
+				return Range.subquery(Query.from(value));
+		}	
+}
+
