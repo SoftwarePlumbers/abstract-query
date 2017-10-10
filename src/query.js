@@ -1,5 +1,5 @@
 const Cube = require('./cube');
-const Stream = require('iterator-plumbing');
+const { Stream } = require('iterator-plumbing');
 const Range = require('./range');
 
 /**

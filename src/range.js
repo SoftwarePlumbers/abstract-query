@@ -1,5 +1,5 @@
 const { Param } = require('./param');
-const Stream = require('iterator-plumbing');
+const { Stream } = require('iterator-plumbing');
 
 /** Default comparator.
 * @param a first parameter
