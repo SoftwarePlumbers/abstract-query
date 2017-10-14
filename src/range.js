@@ -86,6 +86,7 @@ class Range {
 	* | "<="			| Range.lessThanOrEqual 	|
 	* | "="				| Range.equal 				|
 	* | "$and"			| Range.and 				|
+	* | "$has"			| Range.has 				|
 	*/
 	static get OPERATORS() {
 		return RANGE_OPERATORS;
@@ -212,6 +213,26 @@ class Range {
 		return new Subquery(query);
 	}
 
+	/** Create a range which includes items containing an array which has elements within a range
+	*
+	* Objects we are querying may be complex. Where an object property contains an array of simple objects, we may
+	* what to execute a search data contained by that object or array in order to determine if the origninal
+	* high-level object is matched or not. A trivial case would be a constraint that reads something like:
+	* ```
+	* 	{tags : { $has: 'javascript'}}
+	* ```
+	* to select objects with the word 'javascript' in the tags array. This constraint can be constructed with: 
+	* ```
+	* 	{ tags: Range.has( Range.equals('javascript') ) }
+	* ```
+	* @param bounds {Range} range that selects items in the array
+	* @returns {Range} a Range object
+	*/
+	static has(bounds) {
+		return new HasElementMatching(Range.fromValue(bounds));
+	}
+
+
 	/** Check to see if an object is a Range 
 	*
 	* @param obj - object to check.
@@ -268,7 +289,7 @@ class Range {
 	* @returns {Range} a range
 	*/
 	static fromValue(obj, default_constructor = Range.equals, order = DEFAULT_ORDER) {
-
+		// as it says
 		return fuckingcommonjscylicdependencybullshit(obj, default_constructor, order);
 	}
 
@@ -318,7 +339,8 @@ var RANGE_OPERATORS = {
 	">=" 	: Range.greaterThanOrEqual,
 	"<=" 	: Range.lessThanOrEqual,
 	"="	 	: Range.equals,
-	"$and" 	: Range.and
+	"$and" 	: Range.and,
+	"$has" 	: Range.has
 }
 
 /** Range representing an unbounded data set [i.e. no constraint on data returned]
@@ -456,6 +478,8 @@ class Between extends Range {
 			return this.upper_bound.intersect(range).intersect(this.lower_bound);
 		if (range.operator === GreaterThan.OPERATOR || range.operator === GreaterThanOrEqual.OPERATOR)
 			return this.lower_bound.intersect(range).intersect(this.upper_bound);
+		if (range.operator === HasElementMatching.OPERATOR)
+			throw new TypeError("Can't mix array operations and scalar operations on a single field");
 
 		return null;
 	}
@@ -643,6 +667,10 @@ class LessThan extends OpenRange {
 			} 
 		}
 
+		if (range.operator === HasElementMatching.OPERATOR)
+			throw new TypeError("Can't mix array operations and scalar operations on a single field");
+
+
 		throw new RangeError("Uknown operator: ", range.operator);
 	}
 
@@ -751,6 +779,9 @@ class LessThanOrEqual extends OpenRange {
 			} 
 		}
 
+		if (range.operator === HasElementMatching.OPERATOR)
+			throw new TypeError("Can't mix array operations and scalar operations on a single field");
+
 		throw new RangeError("Uknown operator: ", range.operator);
 	}
 
@@ -843,6 +874,9 @@ class GreaterThan extends OpenRange {
 				}
 			} 
 		}
+
+		if (range.operator === HasElementMatching.OPERATOR)
+			throw new TypeError("Can't mix array operations and scalar operations on a single field");
 
 		throw new RangeError("Uknown operator: ", range.operator);
 	}
@@ -954,6 +988,9 @@ class GreaterThanOrEqual extends OpenRange {
 			} 
 		}
 
+		if (range.operator === HasElementMatching.OPERATOR)
+			throw new TypeError("Can't mix array operations and scalar operations on a single field");
+
 		throw new RangeError("Uknown operator: " + range.operator);
 	}
 
@@ -962,6 +999,69 @@ class GreaterThanOrEqual extends OpenRange {
 			let param = parameters[this.value.$];
 			if (param !== undefined) return new GreaterThanOrEqual(param);
 		}
+		return this;
+	}
+}
+
+/** Range has element within some bound
+*
+* @private
+*/
+class HasElementMatching extends Range {
+
+	static get OPERATOR () { return 'has'; }
+
+	constructor(bounds) {
+		super();
+		this.bounds = bounds;
+		this.operator = HasElementMatching.OPERATOR;
+	}
+
+	contains(range) {
+		if (range.operator === HasElementMatching.OPERATOR) return this.bounds.contains(range.bounds);
+		return false;
+	}
+
+	containsItem(item) {
+		let result = false;
+		Stream.from(item).find(element => {
+			let contained = this.bounds.containsItem(element);
+			if (contained || contained === null) result = contained;
+			return result;
+		});
+		return result;
+	}
+
+	intersect(range) {
+		if (range.operator === Unbounded.OPERATOR) return this;
+		if (range.operator === HasElementMatching.OPERATOR) return new HasElementMatching(this.bounds.intersect(range.bounds));
+		throw new TypeError("Can't mix array operations and scalar operations on a single field");
+	}
+
+	toExpression(dimension, formatter, context) { 
+		return formatter.operExpr(dimension, this.operator, this.bounds.toExpression(dimension, formatter, context), context); 
+	}
+
+	equals(range) { 
+		return this.operator === range.operator && this.bounds.equals(range.bounds); 
+	}
+
+	toString()	{ 
+		return this.toJSON().toString(); 
+	}
+
+	toBoundsObject() {
+		return { [this.operator] : this.bounds.toBoundsObject() }
+	}
+
+	toJSON() {
+		return this.toBoundsObject();
+	}	
+
+	bind(parameters) {
+		let bounds = this.bounds.bind(parameters);
+		if (bounds !== this.bounds) return new HasElementMatching(bounds);
+		if (bounds === null) return null;
 		return this;
 	}
 }
@@ -994,7 +1094,9 @@ class Subquery extends Range {
 	intersect(range) {
 		if (range.operator === Unbounded.OPERATOR) return this;
 		if (range.operator === Subquery.OPERATOR) return new Subquery(this.query.and(range.query));
-		return null;
+		if (range.operator === HasElementMatching.OPERATOR)
+			throw new TypeError("Can't mix array operations and subquery operations on a single field");
+		throw new TypeError("Can't mix subquery operations and scalar operations on a single field");
 	}
 
 	toExpression(dimension, formatter, context) { 

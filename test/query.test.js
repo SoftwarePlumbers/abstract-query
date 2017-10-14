@@ -267,33 +267,38 @@ describe('Query', () => {
                 courses: [ 
                     { name: 'javascript', grade: 'A' }, 
                     { name: 'python', grade: 'B'} 
-                ] 
+                ],
+                tags: [ 'old', 'smart'] 
             },
             {   name: 'peter', 
                 age: '19', 
                 courses: [ 
                     { name: 'javascript', grade: 'C' }, 
-                ] 
+                ],
+                tags: ['young', 'dull']
             },
             {   name: 'paul', 
                 age: '25', 
                 courses: [ 
                     { name: 'python', grade: 'B'} 
-                ] 
+                ],
+                tags: ['young']
             },
             {   name: 'cindy', 
                 age: '25', 
                 courses: [ 
                     { name: 'javascript', grade: 'A' }, 
                     { name: 'python', grade: 'A'} 
-                ] 
+                ], 
+                tags: ['young','smart']
             },
             {   name: 'steve', 
                 age: '29', 
                 courses: [ 
                     { name: 'javascript', grade: 'C' }, 
                     { name: 'python', grade: 'F'} 
-                ] 
+                ],
+                tags: [ 'old', 'dull']
             }
         ]
 
@@ -305,6 +310,10 @@ describe('Query', () => {
         let result2 = data.filter(query2.predicate);
         expect(result2).to.have.length(4);
         expect(result2).to.deep.equal(data.filter(item=>item.courses.find(course=>course.name==='python')));
+        let query3 = Query.from({ tags: {$has: 'dull'}});
+        let result3 = data.filter(query3.predicate);
+        expect(result3).to.have.length(2);
+        expect(result3).to.deep.equal(data.filter(item=>item.tags.includes('dull')));
     });
 
 
