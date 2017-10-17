@@ -1,6 +1,6 @@
 {
   "name": "abstract-query",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Abstract query API for building and optimizing queries on the client",
   "main": "src/index.js",
   "scripts": {
