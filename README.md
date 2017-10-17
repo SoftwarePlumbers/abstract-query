@@ -47,7 +47,11 @@ Will result in an expr like:
 
 `grade<"C" && (course="javascript 101" && student[age>="21"] || course="medieval French poetry" && student[age>="40" && age<"65"])`
 
-The objective is to provide several different expression formatters, to support (at a minumum) constructing suitable expressions for IndexedDB, MongoDB, and MySQL. These formatters will be provided in separate packages so that a code can be written to the abstract-query API without creating a dependency on any given back-end store. 
+The objective is to provide several different expression formatters, to support (at a minumum) constructing suitable expressions for IndexedDB, MongoDB, and MySQL. These formatters will be provided in separate packages so that a code can be written to the abstract-query API without creating a dependency on any given back-end store. The following are currently available:
+
+| Target Language | Package |
+|-----------------|---------|
+| MongoDB         | [mongo-query-format](https://npmjs.org/packages/mongo-query-format) |
 
 ## Filtering Arrays and Iterables
 
@@ -98,7 +102,8 @@ The library re-optimises the query when parameters are bound, and also tries qui
 
 ## Subqueries and Child Objects
 
-Subqueries can be used to put conditions on sub-properties. In the below example, the subquery 'expertise_query' is used to pick items in the data array which have an object in 'expertise' which has a language property of 'java'.
+Subqueries can be used to put conditions on sub-properties. In the below example, the subquery 'expertise_query' is used to pick items in the data array which have an object in 'expertise' which has a language property of 'java'. __TODO: add 'has'
+operator and emphasize different behavior for arrays and sub-properties.__
 
 ```javascript
 let data = [ 

@@ -39,10 +39,10 @@ describe('Range', () => {
     });
 
     it('can create has', () => {
-        let range1 = Range.has('mytag');
-        expect(range1.bounds).to.deep.equal(Range.equals('mytag'));
-        range1 = Range.has({ ">": 'bound'});
-        expect(range1.bounds).to.deep.equal(Range.greaterThan('bound'));
+        let range1 = Range.has(['mytag']);
+        expect(range1.bounds[0]).to.deep.equal(Range.equals('mytag'));
+        range1 = Range.has([{ ">": 'bound'}]);
+        expect(range1.bounds[0]).to.deep.equal(Range.greaterThan('bound'));
     });
 
     it('can create ranges from bounds object', ()=>{
@@ -56,8 +56,8 @@ describe('Range', () => {
     	expect(range1).to.deep.equal(Range.lessThanOrEqual(5));
     	range1 = Range.fromBounds({'>=':5});
     	expect(range1).to.deep.equal(Range.greaterThanOrEqual(5));
-        range1 = Range.fromBounds({$has: {'=':5}});
-        expect(range1).to.deep.equal(Range.has(Range.equals(5)));
+        range1 = Range.fromBounds({$has: [{'=':5}]});
+        expect(range1).to.deep.equal(Range.has([Range.equals(5)]));
 
     });
 
@@ -490,9 +490,15 @@ describe('Range', () => {
         expect(range1.bind({param1: 52})).to.be.null;
     });
 
+    it('can bind parameters for has', () => {
+        let range1 = Range.has([$.param1, $.param2]);
+        expect(range1.bind({param1: 34, param2: 55})).to.deep.equal(Range.has([34, 55]));
+        expect(range1.bind({param1: 34, param2: 34})).to.deep.equal(Range.has([34]));
+    });
+
     it('correct intersection for has', () => {
-        let range1 = Range.from({ $has: [6,] });
-        let range2 = Range.from({ $has: [,8] });
+        let range1 = Range.from({ $has: [6] });
+        let range2 = Range.from({ $has: [8] });
         let range3 = range1.intersect(range2);
         expect(range3).to.deep.equal(Range.from({$has: [6,8]}));
     });

@@ -225,11 +225,11 @@ class Range {
 	* ```
 	* 	{ tags: Range.has( Range.equals('javascript') ) }
 	* ```
-	* @param bounds {Range} range that selects items in the array
+	* @param bounds {[Range]} ranges that select items in the array
 	* @returns {Range} a Range object
 	*/
 	static has(bounds) {
-		return new HasElementMatching(Range.fromValue(bounds));
+		return new HasElementsMatching(bounds.map(bound=>Range.fromValue(bound)));
 	}
 
 
@@ -1007,43 +1007,75 @@ class GreaterThanOrEqual extends OpenRange {
 *
 * @private
 */
-class HasElementMatching extends Range {
+class HasElementsMatching extends Range {
 
 	static get OPERATOR () { return 'has'; }
 
 	constructor(bounds) {
 		super();
 		this.bounds = bounds;
-		this.operator = HasElementMatching.OPERATOR;
+		this.operator = HasElementsMatching.OPERATOR;
 	}
 
+	// For containment, this range must match all array elements matched by the other range. Otherwise, the other range
+	// could match an element not matched by this range, which implies this range does not contain the other.
+	//
+	// If all bounds defined in the other range are contained by at least one bound in this range, this condition
+	// is met.
 	contains(range) {
-		if (range.operator === HasElementMatching.OPERATOR) return this.bounds.contains(range.bounds);
+		if (range.operator === HasElementsMatching.OPERATOR)
+			// use Stream versions of every and other because of tri-state implementation 
+			return Stream.from(range.bounds).every(range_bound => 
+				Stream.from(this.bounds).some(this_bound => this_bound.contains(range_bound))
+			);
 		return false;
 	}
 
+	// For every bound, there is some element in item that matches that bound.
 	containsItem(item) {
-		let result = false;
-		Stream.from(item).find(element => {
-			let contained = this.bounds.containsItem(element);
-			if (contained || contained === null) result = contained;
-			return result;
-		});
-		return result;
+		return Stream.from(this.bounds).every(bound => Stream.from(item).some(element=>bound.containsItem(element))); 
 	}
 
+	// hmm, remember that $and : [ { y : { $has : 'numpty' } }, { y : { $has : 'flash' } } ] is not the same as 
+	// { y : { $has : Range.and(Range.equals('numpty'), range.equals('flash')) }. The former should match any element
+	// with y containing both numpty and flash. The second will match nothing since no array element will equal both
+	// numpty and flash.
 	intersect(range) {
 		if (range.operator === Unbounded.OPERATOR) return this;
-		if (range.operator === HasElementMatching.OPERATOR) return new HasElementMatching(this.bounds.intersect(range.bounds));
+		if (range.operator === HasElementsMatching.OPERATOR) {
+
+			let new_bounds = Stream
+				.from(range.bounds)
+				.filter(range_bound => // filter out bounds from range which are contained by some bound in this.bounds
+					!Stream
+						.from(this.bounds)
+						.some(this_bound => this_bound.contains(range_bound)))
+				.toArray();
+
+			return new HasElementsMatching([...this.bounds, ...new_bounds]);
+		}
 		throw new TypeError("Can't mix array operations and scalar operations on a single field");
 	}
 
 	toExpression(dimension, formatter, context) { 
-		return formatter.operExpr(dimension, this.operator, this.bounds.toExpression(dimension, formatter, context), context); 
+		// This is a bit of a problem. For arrays:
+		// Mongo syntax will be $and: [ array_field: { $elemMatch: { $eq: 1 } }, ...]
+		// SQL syntax will be more like exists(select array_field.value from array_field where doc.id = array_field.id) and ...
+		const bounds_formatter = bound => 
+			formatter.operExpr(dimension, this.operator, bound.toExpression(null, formatter, {dimension,context}), context);
+		
+		if (this.bounds.length > 1)
+			return formatter.andExpr(...this.bounds.map(bounds_formatter));
+		else
+			return bounds_formatter(this.bounds[0]);
 	}
 
 	equals(range) { 
-		return this.operator === range.operator && this.bounds.equals(range.bounds); 
+		// Strictly the bounds arrays should be equal if they have the same items irrespective of order;
+		// however to do that we'd have to find a better comparison algorithm.
+		return this.operator === range.operator 
+			&& this.bounds.length === range.bounds.length
+			&& this.bounds.every((bound,index)=>bound.equals(range.bounds[index])); 
 	}
 
 	toString()	{ 
@@ -1051,7 +1083,7 @@ class HasElementMatching extends Range {
 	}
 
 	toBoundsObject() {
-		return { [this.operator] : this.bounds.toBoundsObject() }
+		return { [this.operator] : this.bounds.map(bound=>bound.toBoundsObject()) }
 	}
 
 	toJSON() {
@@ -1059,16 +1091,27 @@ class HasElementMatching extends Range {
 	}	
 
 	bind(parameters) {
-		let bounds = this.bounds.bind(parameters);
-		if (bounds !== this.bounds) return new HasElementMatching(bounds);
-		if (bounds === null) return null;
-		return this;
+
+		let bounds = Stream.from(this.bounds)
+			.map(bound=>bound.bind(parameters))
+			.filter(bound => bound !== null)
+			.reduce((new_bounds,value) => 
+				Stream.from(new_bounds).some(bound => 
+					bound.contains(value)
+				) ? new_bounds : (new_bounds.push(value), new_bounds),
+				[]
+			);
+
+		if (bounds.length === 0) return null;
+		if (this.bounds.length === bounds.length 
+			&& this.bounds.every((bound,index) => bound === bounds[index])) return this;
+		return new HasElementsMatching(bounds);
 	}
 }
 
 class Subquery extends Range {
 
-	static get OPERATOR () { return 'contains'; }
+	static get OPERATOR () { return 'contains'; } // TODO: this is inconsistent now but it doesn't really matter
 
 	constructor(query) {
 		super();
@@ -1091,6 +1134,11 @@ class Subquery extends Range {
 		return result;
 	}
 
+	// Rather suckily, this isn't quite right. When we are operating on an single sub-element, the 'and'
+	// is valid. When we are operating on an array of sub-elements, we have a more esoteric operation -
+	// we want to return true if both subqueries return true, but this is not the same as finding a single
+	// row for which both subqueries return true. So what we are going to do is write this behaviour into
+	// 'has' and leave subquery to deal with the single sub-element case.
 	intersect(range) {
 		if (range.operator === Unbounded.OPERATOR) return this;
 		if (range.operator === Subquery.OPERATOR) return new Subquery(this.query.and(range.query));

@@ -126,8 +126,13 @@ class Query {
     		andExpr(...ands) { return ands.join(' and ') }, 
     		orExpr(...ors) { return "(" + ors.join(' or ') + ")"},
     		operExpr(dimension, operator, value, context) {
+    			// null dimension implies that we are in a 'has' clause where the dimension is attached to the
+    			// outer 'has' operator 
+    			if (dimension === null) return this.operExpr(context.dimension, operator, value, null)
     			if (operator === 'contains')
     				return "(" + value + ")"
+    			if (operator === 'has')
+    				return (context ? printDimension(context.context, context.dimension) : "") + " has(" + value + ")"
     			else	
     				return printDimension(context,dimension) + operator + printValue(value) 
     		}
