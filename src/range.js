@@ -87,6 +87,7 @@ class Range {
 	* | "="				| Range.equal 				|
 	* | "$and"			| Range.and 				|
 	* | "$has"			| Range.has 				|
+	* | "$hasAll"		| Range.hasAll 				|
 	*/
 	static get OPERATORS() {
 		return RANGE_OPERATORS;
@@ -225,13 +226,32 @@ class Range {
 	* ```
 	* 	{ tags: Range.has( Range.equals('javascript') ) }
 	* ```
-	* @param bounds {[Range]} ranges that select items in the array
+	* @param bounds {Range} ranges that select items in the array
 	* @returns {Range} a Range object
 	*/
 	static has(bounds) {
-		return new HasElementsMatching(bounds.map(bound=>Range.fromValue(bound)));
+		return new HasElementsMatching([Range.fromValue(bounds)]);
 	}
 
+	/** Create a range which includes items containing an array which has elements within a range
+	*
+	* Objects we are querying may be complex. Where an object property contains an array of simple objects, we may
+	* what to execute a search data contained by that object or array in order to determine if the origninal
+	* high-level object is matched or not. A trivial case would be a constraint that reads something like:
+	* ```
+	* 	{tags : { $hasAll: ['javascript','framework'] } }
+	* ```
+	* to select objects with the words 'javascript' and 'framework' in the tags array. This constraint can be 
+	* constructed with: 
+	* ```
+	* 	{ tags: Range.hasAll( [Range.equals('javascript'),Range.equals('framework')] ) }
+	* ```
+	* @param bounds {[Range]} ranges that select items in the array
+	* @returns {Range} a Range object
+	*/
+	static hasAll(bounds) {
+		return new HasElementsMatching(bounds.map(bound=>Range.fromValue(bound)));
+	}	
 
 	/** Check to see if an object is a Range 
 	*
@@ -340,7 +360,8 @@ var RANGE_OPERATORS = {
 	"<=" 	: Range.lessThanOrEqual,
 	"="	 	: Range.equals,
 	"$and" 	: Range.and,
-	"$has" 	: Range.has
+	"$has" 	: Range.has,
+	"$hasAll" : Range.hasAll
 }
 
 /** Range representing an unbounded data set [i.e. no constraint on data returned]

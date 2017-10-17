@@ -103,7 +103,7 @@ describe('Query', () => {
 
     it('creates expression with has', () => {
         let query = Query
-            .from({x: [,2], y: { alpha: [2,6], nuts: { $has: ['brazil'] }}});
+            .from({x: [,2], y: { alpha: [2,6], nuts: { $has: 'brazil' }}});
 
         let expression = query.toExpression();
 
@@ -112,8 +112,8 @@ describe('Query', () => {
 
     it('creates expression with has and parameters', () => {
         let query = Query
-            .from({x: [,2], y: { alpha: [2,6], nuts: { $has: [$.param1] }}})
-            .and({ y : {nuts: { $has: [$.param2] }}});
+            .from({x: [,2], y: { alpha: [2,6], nuts: { $has: $.param1 }}})
+            .and({ y : {nuts: { $has: $.param2 }}});
 
         let expression = query.toExpression();
 
@@ -329,11 +329,15 @@ describe('Query', () => {
         let result2 = data.filter(query2.predicate);
         expect(result2).to.have.length(4);
         expect(result2).to.deep.equal(data.filter(item=>item.courses.find(course=>course.name==='python')));
-        let query3 = Query.from({ tags: {$has: ['dull']}});
+        let query3 = Query.from({ tags: {$has: 'dull'}});
         let result3 = data.filter(query3.predicate);
         expect(result3).to.have.length(2);
         expect(result3).to.deep.equal(data.filter(item=>item.tags.includes('dull')));
-    });
+        let query4 = Query.from({ tags: {$hasAll: ['old','dull']}});
+        let result4 = data.filter(query4.predicate);
+        expect(result4).to.have.length(1);
+        expect(result4).to.deep.equal(data.filter(item=>item.tags.includes('dull') && item.tags.includes('old')));
+       });
 
 
 });
