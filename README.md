@@ -22,7 +22,7 @@ let expr = query.toExpression();
 
 and expression should equal:
 
-`grade<"C" and (course="javascript 101" and (student.age>=21) or course="medieval French poetry" and (student.age>=40 and student.age<65))`
+`grade<"C" and (course="javascript 101" and student.age>=21 or course="medieval French poetry" and student.age>=40 and student.age<65)`
 
 Note that the common expression `grade<"C"` has been factored out of the 'or'. Plainly that's not all that much use in this simple example but when programatically constructing complex queries it is extremely useful to ensure that the query that ultimately sent to the data store is reasonably concise.
 
@@ -84,7 +84,7 @@ let expr = query.toExpression();
 
 Will result in an expr like:
 
-`grade<"C" and (course="javascript 101" and (student.age>=$min_age) or course="medieval French poetry" and (student.age>=$min_age and student.age<65))`
+`grade<"C" and (course="javascript 101" and student.age>=$min_age or course="medieval French poetry" and student.age>=$min_age and student.age<65)`
 
 Parameters can be bound to create a new query, thus given the query above:
 
@@ -96,14 +96,13 @@ let expr2 = query
 
 Will result in an expr like:
 
-`grade<"C" and (course="javascript 101" and (student.age>=27) or course="medieval French poetry" and (student.age>=27 and student.age<65))`
+`grade<"C" and (course="javascript 101" and student.age>=27 or course="medieval French poetry" and student.age>=27 and student.age<65)`
 
 The library re-optimises the query when parameters are bound, and also tries quite hard to indentify redundant or mutually exclusive criteria even if a query is parametrised.
 
 ## Subqueries and Child Objects
 
-Subqueries can be used to put conditions on sub-properties. In the below example, the subquery 'expertise_query' is used to pick items in the data array which have an object in 'expertise' which has a language property of 'java'. __TODO: add 'has'
-operator and emphasize different behavior for arrays and sub-properties.__
+Subqueries can be used to put conditions on sub-properties. In the below example, the subquery 'expertise_query' is used to pick items in the data array which have an object in 'expertise' which has a language property of 'java'. 
 
 ```javascript
 let data = [ 
@@ -116,15 +115,29 @@ let data = [
     }, ...other entries...
 ];
 
-let expertise_query = Query.from({ language:'java' });
+let expertise_query = Query.from({ language: 'java' });
 
 let result = data.filter(Query
-	.from({ age: [,50], expertise: expertise_query })
+	.from({ age: [,50], expertise: { $has : expertise_query })
 	.predicate
 );
 ```
 
-Note that it is not necessary to create a subquery as a separate object, the final query could have been written `Query.from({ age: [,50], expertise: { language:'java' }})` with identical effect. Subquery syntax can also be used to filter on properties that are not arrays (for example, the code above would work unchanged if 'expertise' was not an array but a simple object containing language and level properties).
+Note that it is not necessary to create a subquery as a separate object, the final query could have been written `Query.from({ age: [,50], expertise: { $has: { language:'java' } } })` with identical effect. Subquery syntax can also be used to filter on properties that are not arrays:
+
+```javascript
+let data = [ 
+    { 	name: 'jonathan',
+    	age: 45 
+    	expertise: { language:'java', level:'expert' }
+    }, ...other entries...
+];
+
+let result = data.filter(Query
+	.from({ age: [,50], expertise: { language: 'java' })
+	.predicate
+);
+```
 
 ## Caching
 
