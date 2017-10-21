@@ -98,7 +98,7 @@ describe('Query', () => {
 
     	let expression = query.toExpression();
 
-    	expect(expression).to.equal('x<2 and (y.alpha>=2 and y.alpha<6 and (y.beta.nuts="brazil"))');
+    	expect(expression).to.equal('x<2 and y.alpha>=2 and y.alpha<6 and y.beta.nuts="brazil"');
     });
 
     it('creates expression with has', () => {
@@ -107,7 +107,7 @@ describe('Query', () => {
 
         let expression = query.toExpression();
 
-        expect(expression).to.equal('x<2 and (y.alpha>=2 and y.alpha<6 and y has(nuts="brazil"))');
+        expect(expression).to.equal('x<2 and y.alpha>=2 and y.alpha<6 and y.nuts has($self="brazil")');
     });
 
     it('creates expression with has and parameters', () => {
@@ -117,7 +117,7 @@ describe('Query', () => {
 
         let expression = query.toExpression();
 
-        expect(expression).to.equal('x<2 and (y has(nuts=$param2) and y has(nuts=$param1) and y.alpha>=2 and y.alpha<6)');
+        expect(expression).to.equal('x<2 and y.nuts has($self=$param2) and y.nuts has($self=$param1) and y.alpha>=2 and y.alpha<6');
     });
 
     it('creates expression with paramters', () => {
@@ -217,13 +217,13 @@ describe('Query', () => {
     		.or({ course: 'medieval French poetry', student: { age: [40,65]}, grade: [,'C']})
 
     	let expr = query.toExpression();
-    	expect(expr).to.equal('grade<"C" and (course="javascript 101" and (student.age>=21) or course="medieval French poetry" and (student.age>=40 and student.age<65))');
+    	expect(expr).to.equal('grade<"C" and (course="javascript 101" and student.age>=21 or course="medieval French poetry" and student.age>=40 and student.age<65)');
     
 		const formatter = {
     		andExpr(...ands) { return ands.join(' and ') }, 
     		orExpr(...ors) { return "(" + ors.join(' or ') + ")"},
     		operExpr(dimension, operator, value, context) { 
-    			return (operator === 'contains')
+    			return (operator === 'match')
     				? dimension + "[" + value + "]"
     				: dimension + operator + '"' + value + '"' 
     		}
@@ -240,10 +240,10 @@ describe('Query', () => {
             .or({ course: 'medieval French poetry', student: { age: [$.min_age, 65]}, grade: [,'C']})
 
         let expr = query.toExpression();
-        expect(expr).to.equal('grade<"C" and (course="javascript 101" and (student.age>=$min_age) or course="medieval French poetry" and (student.age>=$min_age and student.age<65))');
+        expect(expr).to.equal('grade<"C" and (course="javascript 101" and student.age>=$min_age or course="medieval French poetry" and student.age>=$min_age and student.age<65)');
 
         let expr2 = query.bind({min_age: 27}).toExpression();
-        expect(expr2).to.equal('grade<"C" and (course="javascript 101" and (student.age>=27) or course="medieval French poetry" and (student.age>=27 and student.age<65))');
+        expect(expr2).to.equal('grade<"C" and (course="javascript 101" and student.age>=27 or course="medieval French poetry" and student.age>=27 and student.age<65)');
     });
 
     it('sample code for README.md with predicate tests OK', ()=>{
@@ -269,13 +269,15 @@ describe('Query', () => {
             ];
 
             let expertise_query = Query.from({ language:'java' });
-            let query = Query.from({ age: [,50], expertise: expertise_query })
+            let query = Query.from({ age: [,50], expertise: { $has : expertise_query }});
+
+            debug(JSON.stringify(query));
 
             let result = data.filter(query.predicate);
 
             expect(result).to.have.length(2);
-            expect(query.toExpression()).to.equal('age<50 and (expertise.language="java")');
-            expect(query).to.deep.equal(Query.from({ age: [,50], expertise: { language:'java' }}));
+            expect(query.toExpression()).to.equal('age<50 and expertise has(language="java")');
+            expect(query).to.deep.equal(Query.from({ age: [,50], expertise: { $has: { language:'java' }}}));
 
     });
 
@@ -325,7 +327,7 @@ describe('Query', () => {
         let result = data.filter(query1.predicate);
         expect(result).to.have.length(2);
         expect(result).to.deep.equal(data.filter(item=>item.age>=26));
-        let query2 = Query.from({ courses: { name: 'python'}});
+        let query2 = Query.from({ courses: { $has: { name: 'python'}}});
         let result2 = data.filter(query2.predicate);
         expect(result2).to.have.length(4);
         expect(result2).to.deep.equal(data.filter(item=>item.courses.find(course=>course.name==='python')));

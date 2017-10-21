@@ -4,7 +4,7 @@
   "description": "Abstract query API for building and optimizing queries on the client",
   "main": "src/index.js",
   "scripts": {
-    "test": "mocha",
+    "test": "DEBUG=abstract-query~tests mocha",
     "docs": "jsdoc -c ./jsdoc.conf -d build/docs -t ./node_modules/ink-docstrap/template README.md src/*.js",
     "lint": "./node_modules/.bin/eslint --format unix *.js; exit 0"
   },

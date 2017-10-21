@@ -119,7 +119,12 @@ class Query {
 	*/
 	static get DEFAULT_FORMAT() {
 
-		const printDimension = (context,name) => context ? printDimension(context.context, context.dimension) + "." + name : name;
+		function printDimension(context,name) {
+			if (name === null) return '$self';
+			if (!context || !context.dimension) return name;
+			return printDimension(context.context, context.dimension) + "." + name;
+		}
+		
 		const printValue = value => typeof value === 'string' ? '"' + value + '"' : value;
 
 		return {
@@ -128,13 +133,13 @@ class Query {
     		operExpr(dimension, operator, value, context) {
     			// null dimension implies that we are in a 'has' clause where the dimension is attached to the
     			// outer 'has' operator 
-    			if (dimension === null) return this.operExpr(context.dimension, operator, value, null)
-    			if (operator === 'contains')
-    				return "(" + value + ")"
+    			if (operator === 'match')
+    				return value;
     			if (operator === 'has')
-    				return (context ? printDimension(context.context, context.dimension) : "") + " has(" + value + ")"
-    			else	
-    				return printDimension(context,dimension) + operator + printValue(value) 
+    				return printDimension(context, dimension) + " has(" + value + ")"
+    			//if (dimension === null) return '$self' + operator + printValue(value) 
+
+    			return printDimension(context,dimension) + operator + printValue(value) 
     		}
     	}
 	}

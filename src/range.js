@@ -1081,6 +1081,8 @@ class HasElementsMatching extends Range {
 	toExpression(dimension, formatter, context) { 
 		// This is a bit of a problem. For arrays:
 		// Mongo syntax will be $and: [ array_field: { $elemMatch: { $eq: 1 } }, ...]
+		// Mongo syntax is a bit long winded but AFAICS Mongo doesn't support a briefer format that is
+		// also sufficiently generic.
 		// SQL syntax will be more like exists(select array_field.value from array_field where doc.id = array_field.id) and ...
 		const bounds_formatter = bound => 
 			formatter.operExpr(dimension, this.operator, bound.toExpression(null, formatter, {dimension,context}), context);
@@ -1132,7 +1134,7 @@ class HasElementsMatching extends Range {
 
 class Subquery extends Range {
 
-	static get OPERATOR () { return 'contains'; } // TODO: this is inconsistent now but it doesn't really matter
+	static get OPERATOR () { return 'match'; } // TODO: this is inconsistent now but it doesn't really matter
 
 	constructor(query) {
 		super();
@@ -1146,20 +1148,9 @@ class Subquery extends Range {
 	}
 
 	containsItem(item) {
-		let result = false;
-		Stream.from(item).find(element => {
-			let contained = this.query.containsItem(element);
-			if (contained || contained === null) result = contained;
-			return result;
-		});
-		return result;
+		return this.query.containsItem(item);
 	}
 
-	// Rather suckily, this isn't quite right. When we are operating on an single sub-element, the 'and'
-	// is valid. When we are operating on an array of sub-elements, we have a more esoteric operation -
-	// we want to return true if both subqueries return true, but this is not the same as finding a single
-	// row for which both subqueries return true. So what we are going to do is write this behaviour into
-	// 'has' and leave subquery to deal with the single sub-element case.
 	intersect(range) {
 		if (range.operator === Unbounded.OPERATOR) return this;
 		if (range.operator === Subquery.OPERATOR) return new Subquery(this.query.and(range.query));
@@ -1169,7 +1160,8 @@ class Subquery extends Range {
 	}
 
 	toExpression(dimension, formatter, context) { 
-		return formatter.operExpr(dimension, this.operator, this.query.toExpression(formatter, { dimension, context }), context); 
+		// dimension may be null if subquery appears in a 'has' clause.
+		return formatter.operExpr(dimension, this.operator, this.query.toExpression(formatter,{ dimension, context }), context); 
 	}
 
 	equals(range) { 
