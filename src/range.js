@@ -246,7 +246,7 @@ class Range {
 	* ```
 	* 	{ tags: Range.hasAll( [Range.equals('javascript'),Range.equals('framework')] ) }
 	* ```
-	* @param bounds {[Range]} ranges that select items in the array
+	* @param bounds {Range[]} ranges that select items in the array
 	* @returns {Range} a Range object
 	*/
 	static hasAll(bounds) {
